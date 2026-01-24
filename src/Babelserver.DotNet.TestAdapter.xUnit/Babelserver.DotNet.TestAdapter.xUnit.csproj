@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <AssemblyName>Babelserver.DotNet.TestAdapter.xUnit.TestAdapter</AssemblyName>
+    <RootNamespace>Babelserver.DotNet.TestAdapter.xUnit</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- NuGet Package -->
+    <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Hallvard</Authors>
+    <Description>A quiet xUnit test adapter that suppresses console noise</Description>
+    <PackageTags>test;xunit;adapter;quiet</PackageTags>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.14.1" />
+    <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
+  </ItemGroup>
+
+  <!-- Include the TestLogger automatically -->
+  <ItemGroup>
+    <ProjectReference Include="..\Babelserver.DotNet.TestLogger\Babelserver.DotNet.TestLogger.csproj" />
+  </ItemGroup>
+
+</Project>

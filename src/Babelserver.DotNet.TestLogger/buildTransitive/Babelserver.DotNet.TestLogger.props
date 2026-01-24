@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Automatically use the list logger -->
+    <VSTestLogger Condition="'$(VSTestLogger)' == ''">list</VSTestLogger>
+  </PropertyGroup>
+</Project>

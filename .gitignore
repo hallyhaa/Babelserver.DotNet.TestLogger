@@ -1,0 +1,15 @@
+# Build output
+bin/
+obj/
+
+# NuGet packages
+*.nupkg
+
+# IDE
+.idea/
+*.user
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db
