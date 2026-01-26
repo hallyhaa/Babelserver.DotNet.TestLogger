@@ -47,7 +47,7 @@ Running MyProject.Tests.UserServiceTests
 Add to your test project's `.csproj`:
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="1.0.0" />
+<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="1.0.1" />
 ```
 
 This single package includes both an xUnit adapter that suppresses xUnit's console noise and the
@@ -55,6 +55,38 @@ Babelserver.DotNet.TestLogger implementation of Microsoft.VisualStudio.TestPlatf
 
 **Important:** Do remove `xunit.runner.visualstudio` from your project (this package replaces it). If both are present,
 tests may run twice and xUnit's console noise will reappear.
+
+## Loggers
+
+Two loggers are available:
+
+| Logger | Command | Description |
+|--------|---------|-------------|
+| `list` | `dotnet test` | Groups parameterized tests (Theory/InlineData) into a single line |
+| `listAll` | `dotnet test --logger listAll` | Shows every test run individually |
+
+### Grouped output (default)
+
+Parameterized tests are grouped into a single line:
+```
+  ✅ MyTheoryTest (4 runs) (10ms)
+```
+
+If some runs fail, details are shown:
+```
+  ❌ MyTheoryTest (2/4 runs failed) (10ms)
+    ► MyTheoryTest(input: 2, expected: 3)
+    Error: Assert.Equal() Failure...
+```
+
+### Verbose output
+
+Use `--logger listAll` to see every parameterized test individually:
+```
+  ✅ MyTheoryTest(input: 1, expected: 2) (2ms)
+  ✅ MyTheoryTest(input: 2, expected: 4) (1ms)
+  ✅ MyTheoryTest(input: 3, expected: 6) (0ms)
+```
 
 
 ## Requirements

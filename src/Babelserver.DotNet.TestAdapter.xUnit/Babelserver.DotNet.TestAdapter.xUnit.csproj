@@ -9,7 +9,7 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Hallvard</Authors>
     <Description>A quiet xUnit test adapter that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>

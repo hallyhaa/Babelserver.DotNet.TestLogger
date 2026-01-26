@@ -9,16 +9,26 @@ namespace Babelserver.DotNet.TestLogger;
 public class ListTestLogger : ITestLoggerWithParameters
 {
     private string? _currentTestClass;
+    private string? _currentBaseMethodName;
     private int _totalPassed;
     private int _totalFailed;
     private int _totalSkipped;
     private bool _headerPrinted;
+    private bool _verbose;
+
+    // Buffer for grouping parameterized tests
+    private readonly List<TestResult> _pendingResults = [];
+
+    protected virtual bool DefaultVerbose => false;
 
     public void Initialize(TestLoggerEvents events, string _) =>
         Initialize(events, new Dictionary<string, string?>());
 
     public void Initialize(TestLoggerEvents events, Dictionary<string, string?> parameters)
     {
+        _verbose = DefaultVerbose || (parameters.TryGetValue("verbose", out var verboseValue)
+            && (verboseValue?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false));
+
         events.TestResult += OnTestResult;
         events.TestRunComplete += OnTestRunComplete;
     }
@@ -33,17 +43,40 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         var result = e.Result;
         var testCase = result.TestCase;
-
         var className = GetClassName(testCase.FullyQualifiedName);
+        var baseMethodName = GetBaseMethodName(testCase.FullyQualifiedName);
+
+        // Check if we've moved to a new class or method - flush pending results first
+        var classChanged = className != _currentTestClass;
+        var methodChanged = baseMethodName != _currentBaseMethodName;
+
+        if ((classChanged || methodChanged) && _pendingResults.Count > 0)
+        {
+            FlushPendingResults();
+        }
 
         // If this is a new class, print a class header
-        if (className != _currentTestClass)
+        if (classChanged)
         {
             _currentTestClass = className;
             Console.WriteLine($"Running {OutputStyle.Cyan}{className}{OutputStyle.Reset}");
         }
 
-        var testName = GetTestName(testCase.DisplayName, testCase.FullyQualifiedName);
+        _currentBaseMethodName = baseMethodName;
+
+        if (_verbose)
+        {
+            PrintSingleResult(result);
+        }
+        else
+        {
+            _pendingResults.Add(result);
+        }
+    }
+
+    private void PrintSingleResult(TestResult result)
+    {
+        var testName = GetTestName(result.TestCase.DisplayName, result.TestCase.FullyQualifiedName);
 
         switch (result.Outcome)
         {
@@ -79,8 +112,78 @@ public class ListTestLogger : ITestLoggerWithParameters
         }
     }
 
-    private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e) =>
+    private void FlushPendingResults()
+    {
+        if (_pendingResults.Count == 0)
+            return;
+
+        var totalRuns = _pendingResults.Count;
+        var passed = _pendingResults.Count(r => r.Outcome == TestOutcome.Passed);
+        var failed = _pendingResults.Count(r => r.Outcome == TestOutcome.Failed);
+        var skipped = _pendingResults.Count(r => r.Outcome == TestOutcome.Skipped);
+        var totalDuration = TimeSpan.FromTicks(_pendingResults.Sum(r => r.Duration.Ticks));
+        var baseMethodName = _currentBaseMethodName ?? "Unknown";
+
+        // Update totals
+        _totalPassed += passed;
+        _totalFailed += failed;
+        _totalSkipped += skipped + _pendingResults.Count(r =>
+            r.Outcome != TestOutcome.Passed &&
+            r.Outcome != TestOutcome.Failed &&
+            r.Outcome != TestOutcome.Skipped);
+
+        if (totalRuns == 1)
+        {
+            // Single test - print normally (without run count)
+            var result = _pendingResults[0];
+            var testName = GetTestName(result.TestCase.DisplayName, result.TestCase.FullyQualifiedName);
+
+            Console.WriteLine(result.Outcome switch
+            {
+                TestOutcome.Passed => OutputStyle.PassedResult(testName, result.Duration),
+                TestOutcome.Failed => OutputStyle.FailedResult(testName, result.Duration),
+                TestOutcome.Skipped => OutputStyle.SkippedResult(testName,
+                    result.ErrorMessage ?? result.Messages.FirstOrDefault()?.Text),
+                _ => OutputStyle.UnknownResult(testName, result.Outcome.ToString())
+            });
+
+            if (result.Outcome == TestOutcome.Failed)
+            {
+                PrintFailureDetails(result);
+            }
+        }
+        else if (failed == 0 && skipped == 0)
+        {
+            // All passed
+            Console.WriteLine(OutputStyle.GroupedPassedResult(baseMethodName, totalRuns, totalDuration));
+        }
+        else if (failed > 0)
+        {
+            // Some failed
+            Console.WriteLine(OutputStyle.GroupedFailedResult(baseMethodName, failed, totalRuns, totalDuration));
+
+            // Print failure details for each failed test
+            foreach (var failedResult in _pendingResults.Where(r => r.Outcome == TestOutcome.Failed))
+            {
+                var testName = GetTestName(failedResult.TestCase.DisplayName, failedResult.TestCase.FullyQualifiedName);
+                Console.WriteLine($"    {OutputStyle.Dim}► {testName}{OutputStyle.Reset}");
+                PrintFailureDetails(failedResult);
+            }
+        }
+        else
+        {
+            // All skipped or mixed skipped/passed
+            Console.WriteLine(OutputStyle.GroupedSkippedResult(baseMethodName, skipped, totalRuns));
+        }
+
+        _pendingResults.Clear();
+    }
+
+    private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e)
+    {
+        FlushPendingResults();
         PrintSummary();
+    }
 
     private static void PrintHeader()
     {
@@ -141,6 +244,19 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         var lastDot = nameWithoutParams.LastIndexOf('.');
         return lastDot > 0 ? nameWithoutParams[..lastDot] : nameWithoutParams;
+    }
+
+    private static string GetBaseMethodName(string fullyQualifiedName)
+    {
+        // Extract just the method name without parameters
+        // Format: Namespace.ClassName.MethodName or Namespace.ClassName.MethodName(params)
+        var parenIndex = fullyQualifiedName.IndexOf('(');
+        var nameWithoutParams = parenIndex >= 0
+            ? fullyQualifiedName[..parenIndex]
+            : fullyQualifiedName;
+
+        var lastDot = nameWithoutParams.LastIndexOf('.');
+        return lastDot > 0 ? nameWithoutParams[(lastDot + 1)..] : nameWithoutParams;
     }
 
     private static string GetTestName(string displayName, string fullyQualifiedName)

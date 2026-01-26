@@ -68,4 +68,48 @@ public class OutputStyleTests
         Assert.StartsWith("  ", failed);
         Assert.StartsWith("  ", skipped);
     }
+
+    [Fact]
+    public void GroupedPassedResult_ContainsRunCount()
+    {
+        var result = OutputStyle.GroupedPassedResult("TestName", 4, TimeSpan.FromMilliseconds(100));
+
+        Assert.Contains("TestName", result);
+        Assert.Contains("4 runs", result);
+        Assert.Contains("100ms", result);
+        Assert.Contains(OutputStyle.Green, result);
+    }
+
+    [Fact]
+    public void GroupedFailedResult_ContainsFailedCount()
+    {
+        var result = OutputStyle.GroupedFailedResult("TestName", 2, 4, TimeSpan.FromMilliseconds(50));
+
+        Assert.Contains("TestName", result);
+        Assert.Contains("2/4 runs failed", result);
+        Assert.Contains("50ms", result);
+        Assert.Contains(OutputStyle.Red, result);
+    }
+
+    [Fact]
+    public void GroupedSkippedResult_ContainsSkippedCount()
+    {
+        var result = OutputStyle.GroupedSkippedResult("TestName", 3, 5);
+
+        Assert.Contains("TestName", result);
+        Assert.Contains("3/5 runs skipped", result);
+    }
+
+    [Fact]
+    public void GroupedResultMethods_HaveSameIndentation()
+    {
+        var passed = OutputStyle.GroupedPassedResult("Test", 2, TimeSpan.Zero);
+        var failed = OutputStyle.GroupedFailedResult("Test", 1, 2, TimeSpan.Zero);
+        var skipped = OutputStyle.GroupedSkippedResult("Test", 1, 2);
+
+        Assert.StartsWith("  ", passed);
+        Assert.StartsWith("  ", failed);
+        Assert.StartsWith("  ", skipped);
+    }
+
 }

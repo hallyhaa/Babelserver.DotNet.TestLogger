@@ -55,4 +55,16 @@ internal static class OutputStyle
 
     public static string UnknownResult(string testName, string outcome) =>
         $"  {Unknown} {Yellow}{testName}{Reset} {Dim}({outcome}){Reset}";
+
+    public static string GroupedPassedResult(string testName, int runCount, TimeSpan duration) =>
+        $"  {Passed} {Green}{testName}{Reset} {Dim}({runCount} runs){Reset} {FormatDuration(duration)}";
+
+    public static string GroupedFailedResult(string testName, int failedCount, int totalCount, TimeSpan duration) =>
+        $"  {Failed} {Red}{testName}{Reset} {Dim}({failedCount}/{totalCount} runs failed){Reset} {FormatDuration(duration)}";
+
+    public static string GroupedSkippedResult(string testName, int skippedCount, int totalCount)
+    {
+        var spacing = UseAscii ? " " : "  ";
+        return $"  {Skipped}{spacing}{Yellow}{testName}{Reset} {Dim}({skippedCount}/{totalCount} runs skipped){Reset}";
+    }
 }
