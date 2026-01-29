@@ -13,7 +13,7 @@ and matching the [Gradle Test Logger Plugin](https://github.com/hallyhaa/gradle-
 ## Quick Start (xUnit)
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="1.0.2" />
+<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="2.0.0" />
 ```
 
 See the [full documentation](src/Babelserver.DotNet.TestAdapter.xUnit/README.md) for features, sample output, and configuration options.

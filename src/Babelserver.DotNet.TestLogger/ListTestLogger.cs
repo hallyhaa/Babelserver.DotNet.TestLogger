@@ -8,12 +8,9 @@ namespace Babelserver.DotNet.TestLogger;
 [FriendlyName("list")]
 public class ListTestLogger : ITestLoggerWithParameters
 {
-    private string? _currentTestClass;
-    private string? _currentBaseMethodName;
     private int _totalPassed;
     private int _totalFailed;
     private int _totalSkipped;
-    private bool _headerPrinted;
     private bool _verbose;
 
     // Buffer for grouping parameterized tests
@@ -21,7 +18,7 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     protected virtual bool DefaultVerbose => false;
 
-    public void Initialize(TestLoggerEvents events, string _) =>
+    public void Initialize(TestLoggerEvents events, string testRunDirectory) =>
         Initialize(events, new Dictionary<string, string?>());
 
     public void Initialize(TestLoggerEvents events, Dictionary<string, string?> parameters)
@@ -35,43 +32,9 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     private void OnTestResult(object? sender, TestResultEventArgs e)
     {
-        if (!_headerPrinted)
-        {
-            PrintHeader();
-            _headerPrinted = true;
-        }
-
-        var result = e.Result;
-        var testCase = result.TestCase;
-        var className = GetClassName(testCase.FullyQualifiedName);
-        var baseMethodName = GetBaseMethodName(testCase.FullyQualifiedName);
-
-        // Check if we've moved to a new class or method - flush pending results first
-        var classChanged = className != _currentTestClass;
-        var methodChanged = baseMethodName != _currentBaseMethodName;
-
-        if ((classChanged || methodChanged) && _pendingResults.Count > 0)
-        {
-            FlushPendingResults();
-        }
-
-        // If this is a new class, print a class header
-        if (classChanged)
-        {
-            _currentTestClass = className;
-            Console.WriteLine($"Running {OutputStyle.Cyan}{className}{OutputStyle.Reset}");
-        }
-
-        _currentBaseMethodName = baseMethodName;
-
-        if (_verbose)
-        {
-            PrintSingleResult(result);
-        }
-        else
-        {
-            _pendingResults.Add(result);
-        }
+        // Buffer all results - we'll group and print them in OnTestRunComplete
+        // This handles parallel test execution where results arrive out of order
+        _pendingResults.Add(e.Result);
     }
 
     private void PrintSingleResult(TestResult result)
@@ -100,34 +63,84 @@ public class ListTestLogger : ITestLoggerWithParameters
                 break;
             case TestOutcome.None:
                 Console.WriteLine(OutputStyle.UnknownResult(testName, "None"));
+                _totalSkipped++;
                 break;
 
             case TestOutcome.NotFound:
                 Console.WriteLine(OutputStyle.UnknownResult(testName, "NotFound"));
+                _totalSkipped++;
                 break;
 
             default:
                 Console.WriteLine(OutputStyle.UnknownResult(testName, result.Outcome.ToString()));
+                _totalSkipped++;
                 break;
         }
     }
 
-    private void FlushPendingResults()
+    private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e)
     {
-        if (_pendingResults.Count == 0)
+        PrintHeader();
+        PrintAllResults();
+        PrintSummary();
+    }
+
+    private void PrintAllResults()
+    {
+        // Group results by class, then by base method name
+        var resultsByClass = _pendingResults
+            .GroupBy(r => GetClassName(r.TestCase.FullyQualifiedName))
+            .OrderBy(g => g.Key);
+
+        var firstClass = true;
+        foreach (var classGroup in resultsByClass)
+        {
+            if (!firstClass)
+            {
+                Console.WriteLine();
+            }
+            firstClass = false;
+            Console.WriteLine($"Running {OutputStyle.Cyan}{classGroup.Key}{OutputStyle.Reset}");
+
+            var resultsByMethod = classGroup
+                .GroupBy(r => GetBaseMethodName(r.TestCase.FullyQualifiedName))
+                .OrderBy(g => g.Key);
+
+            foreach (var methodGroup in resultsByMethod)
+            {
+                var results = methodGroup.ToList();
+
+                if (_verbose)
+                {
+                    foreach (var result in results)
+                    {
+                        PrintSingleResult(result);
+                    }
+                }
+                else
+                {
+                    PrintGroupedResults(results);
+                }
+            }
+        }
+    }
+
+    private void PrintGroupedResults(List<TestResult> results)
+    {
+        if (results.Count == 0)
             return;
 
-        var totalRuns = _pendingResults.Count;
-        var passed = _pendingResults.Count(r => r.Outcome == TestOutcome.Passed);
-        var failed = _pendingResults.Count(r => r.Outcome == TestOutcome.Failed);
-        var skipped = _pendingResults.Count(r => r.Outcome == TestOutcome.Skipped);
-        var totalDuration = TimeSpan.FromTicks(_pendingResults.Sum(r => r.Duration.Ticks));
-        var baseMethodName = _currentBaseMethodName ?? "Unknown";
+        var totalRuns = results.Count;
+        var passed = results.Count(r => r.Outcome == TestOutcome.Passed);
+        var failed = results.Count(r => r.Outcome == TestOutcome.Failed);
+        var skipped = results.Count(r => r.Outcome == TestOutcome.Skipped);
+        var totalDuration = TimeSpan.FromTicks(results.Sum(r => r.Duration.Ticks));
+        var baseMethodName = GetBaseMethodName(results[0].TestCase.FullyQualifiedName);
 
         // Update totals
         _totalPassed += passed;
         _totalFailed += failed;
-        _totalSkipped += skipped + _pendingResults.Count(r =>
+        _totalSkipped += skipped + results.Count(r =>
             r.Outcome != TestOutcome.Passed &&
             r.Outcome != TestOutcome.Failed &&
             r.Outcome != TestOutcome.Skipped);
@@ -135,7 +148,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         if (totalRuns == 1)
         {
             // Single test - print normally (without run count)
-            var result = _pendingResults[0];
+            var result = results[0];
             var testName = GetTestName(result.TestCase.DisplayName, result.TestCase.FullyQualifiedName);
 
             Console.WriteLine(result.Outcome switch
@@ -163,7 +176,7 @@ public class ListTestLogger : ITestLoggerWithParameters
             Console.WriteLine(OutputStyle.GroupedFailedResult(baseMethodName, failed, totalRuns, totalDuration));
 
             // Print failure details for each failed test
-            foreach (var failedResult in _pendingResults.Where(r => r.Outcome == TestOutcome.Failed))
+            foreach (var failedResult in results.Where(r => r.Outcome == TestOutcome.Failed))
             {
                 var testName = GetTestName(failedResult.TestCase.DisplayName, failedResult.TestCase.FullyQualifiedName);
                 Console.WriteLine($"    {OutputStyle.Dim}► {testName}{OutputStyle.Reset}");
@@ -175,14 +188,6 @@ public class ListTestLogger : ITestLoggerWithParameters
             // All skipped or mixed skipped/passed
             Console.WriteLine(OutputStyle.GroupedSkippedResult(baseMethodName, skipped, totalRuns));
         }
-
-        _pendingResults.Clear();
-    }
-
-    private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e)
-    {
-        FlushPendingResults();
-        PrintSummary();
     }
 
     private static void PrintHeader()

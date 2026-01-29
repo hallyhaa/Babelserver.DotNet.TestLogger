@@ -3,18 +3,20 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <AssemblyName>Babelserver.DotNet.TestAdapter.xUnit.TestAdapter</AssemblyName>
-    <RootNamespace>Babelserver.DotNet.TestAdapter.xUnit</RootNamespace>
+    <RootNamespace>Xunit.Runner.VisualStudio</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
-    <Version>1.0.2</Version>
+    <Version>2.0.0</Version>
     <Authors>Hallvard</Authors>
-    <Description>A quiet xUnit test adapter that suppresses console noise</Description>
+    <Description>A quiet xUnit test adapter based on xunit.runner.visualstudio that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -25,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.14.1" />
-    <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
+    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.14.1" PrivateAssets="All" />
+    <PackageReference Include="xunit.runner.reporters" Version="2.9.3" />
   </ItemGroup>
 
   <!-- Include the TestLogger automatically -->

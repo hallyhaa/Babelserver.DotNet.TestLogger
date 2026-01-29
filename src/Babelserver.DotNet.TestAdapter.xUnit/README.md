@@ -8,7 +8,7 @@ by Maven's Surefire output and matching the [Gradle Test Logger Plugin](https://
 - Shows pass/fail/skip status for each individual test
 - Displays a summary with test counts
 - Skip reasons displayed when available
-- Error messages and stack traces for failed tests
+- Error messages and stack traces included for failed tests
 
 ## Sample Output
 
@@ -47,7 +47,7 @@ Running MyProject.Tests.UserServiceTests
 Add to your test project's `.csproj`:
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="1.0.2" />
+<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="2.0.0" />
 ```
 
 This single package includes both an xUnit adapter that suppresses xUnit's console noise and the
@@ -100,11 +100,21 @@ Use `--logger listAll` to see every parameterized test individually:
 |---------|-------------|
 | [Babelserver.DotNet.TestLogger](https://www.nuget.org/packages/Babelserver.DotNet.TestLogger) | Standalone logger for NUnit/MSTest (included automatically in this package) |
 
+
 ## How It Works
 
-This solution consists of two packages:
+This package set out with an ambition that turned out to be most easily fulfilled by forking
+[xunit.runner.visualstudio](https://github.com/xunit/visualstudio.xunit) and making one, single modification: console
+output suppression. This means you get **full compatibility** with the official xUnit adapter, including:
 
-1. **Babelserver.DotNet.TestLogger** - An `ITestLoggerWithParameters` implementation that formats test results
+- Test filtering (`--filter`)
+- Runsettings support
+- Parallel execution
+- Traits
+- All other xUnit features
 
-2. **Babelserver.DotNet.TestAdapter.xUnit** - A minimal VSTest adapter that wraps xUnit execution while suppressing its
-                                              console output. This package automatically includes the TestLogger.
+For documentation on these features, see the official [xUnit documentation](https://xunit.net/docs/configuration-files).
+We have used v2.8.2 of xunit.runner.visualstudio as the base for our fork.
+
+The only difference from xunit.runner.visualstudio is that xUnit's console noise is suppressed, replaced by the clean
+formatted output from our TestLogger.

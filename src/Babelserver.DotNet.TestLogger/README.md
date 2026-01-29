@@ -13,7 +13,7 @@ Install this package directly only if you're using NUnit or MSTest (not xUnit).
 ## Usage (NUnit/MSTest)
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestLogger" Version="1.0.2" />
+<PackageReference Include="Babelserver.DotNet.TestLogger" Version="2.0.0" />
 ```
 
 Then run:
