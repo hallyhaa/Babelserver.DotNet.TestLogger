@@ -4,15 +4,16 @@ A test logger for `dotnet test` listing all tests run, one by one.
 
 ## Note
 
-If you're using xUnit, don't use this package directly. It is typically installed automatically via
-Babelserver.DotNet.TestAdapter.xUnit, which includes an xUnit adapter.
+If you're using xUnit, don't use this package directly. Use
+[Babelserver.DotNet.TestAdapter.xUnit](https://www.nuget.org/packages/Babelserver.DotNet.TestAdapter.xUnit) instead,
+which includes this logger automatically plus an xUnit adapter that suppresses xUnit's console noise.
 
 Install this package directly only if you're using NUnit or MSTest (not xUnit).
 
 ## Usage (NUnit/MSTest)
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestLogger" Version="1.0.1" />
+<PackageReference Include="Babelserver.DotNet.TestLogger" Version="1.0.2" />
 ```
 
 Then run:

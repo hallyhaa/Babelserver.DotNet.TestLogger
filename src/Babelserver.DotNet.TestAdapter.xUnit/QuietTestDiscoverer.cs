@@ -74,8 +74,9 @@ internal class DiscoverySink(ITestCaseDiscoverySink discoverySink, string assemb
 
     private TestCase CreateTestCase(ITestCase xunitTestCase)
     {
+        var fqn = $"{xunitTestCase.TestMethod.TestClass.Class.Name}.{xunitTestCase.TestMethod.Method.Name}";
         var testCase = new TestCase(
-            xunitTestCase.DisplayName,
+            fqn,
             new Uri(QuietTestExecutor.ExecutorUri),
             assemblyPath)
         {

@@ -9,13 +9,15 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Hallvard</Authors>
     <Description>A quiet xUnit test adapter that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>

@@ -9,13 +9,15 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestLogger</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Hallvard</Authors>
     <Description>A test logger for dotnet test that lists each test with colored output</Description>
     <PackageTags>test;logger;list;colors;xunit;nunit;mstest</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>

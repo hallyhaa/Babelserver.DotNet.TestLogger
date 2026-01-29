@@ -47,7 +47,7 @@ Running MyProject.Tests.UserServiceTests
 Add to your test project's `.csproj`:
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="1.0.1" />
+<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="1.0.2" />
 ```
 
 This single package includes both an xUnit adapter that suppresses xUnit's console noise and the
@@ -93,6 +93,12 @@ Use `--logger listAll` to see every parameterized test individually:
 
 - .NET 8.0 or later
 - xUnit 2.x (for the xUnit adapter)
+
+## Related Packages
+
+| Package | Description |
+|---------|-------------|
+| [Babelserver.DotNet.TestLogger](https://www.nuget.org/packages/Babelserver.DotNet.TestLogger) | Standalone logger for NUnit/MSTest (included automatically in this package) |
 
 ## How It Works
 
