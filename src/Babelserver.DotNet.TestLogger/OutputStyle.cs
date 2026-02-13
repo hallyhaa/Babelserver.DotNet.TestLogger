@@ -57,7 +57,7 @@ internal static class OutputStyle
         $"  {Unknown} {Yellow}{testName}{Reset} {Dim}({outcome}){Reset}";
 
     public static string GroupedPassedResult(string testName, int runCount, TimeSpan duration) =>
-        $"  {Passed} {Green}{testName}{Reset} {Dim}({runCount} runs){Reset} {FormatDuration(duration)}";
+        $"  {Passed} {Green}{testName}{Reset} {Dim}({runCount} {(runCount == 1 ? "run" : "runs")}){Reset} {FormatDuration(duration)}";
 
     public static string GroupedFailedResult(string testName, int failedCount, int totalCount, TimeSpan duration) =>
         $"  {Failed} {Red}{testName}{Reset} {Dim}({failedCount}/{totalCount} runs failed){Reset} {FormatDuration(duration)}";

@@ -1,21 +1,20 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
+using Babelserver.DotNet.TestLogger;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Xunit.Abstractions;
 using VsTestResult = Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResult;
 using VsTestResultMessage = Microsoft.VisualStudio.TestPlatform.ObjectModel.TestResultMessage;
 
-namespace Xunit.Runner.VisualStudio;
+namespace Xunit.Runner.VisualStudio.Sinks;
 
-public sealed class VsExecutionSink : TestMessageSink, IExecutionSink, IDisposable
+public sealed class VsExecutionSink : TestMessageSink, IExecutionSink
 {
 	readonly Func<bool> cancelledThunk;
 	readonly LoggerHelper logger;
 	readonly IMessageSinkWithTypes innerSink;
 	readonly ITestExecutionRecorder recorder;
 	readonly Dictionary<string, TestCase> testCasesMap;
+	readonly Dictionary<string, int> classTestCounts;
 
 	public VsExecutionSink(
 		IMessageSinkWithTypes innerSink,
@@ -29,6 +28,19 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink, IDisposab
 		this.logger = logger;
 		this.testCasesMap = testCasesMap;
 		this.cancelledThunk = cancelledThunk;
+
+		// Compute test count per class for streaming output
+		classTestCounts = testCasesMap.Values
+			.GroupBy(tc => GetClassName(tc.FullyQualifiedName))
+			.ToDictionary(g => g.Key, g => g.Count());
+
+		// Set class count property on each TestCase so the logger can detect class completion
+		foreach (var tc in testCasesMap.Values)
+		{
+			var className = GetClassName(tc.FullyQualifiedName);
+			if (classTestCounts.TryGetValue(className, out var count))
+				tc.SetPropertyValue(ListTestLogger.ClassTestCountProperty, count);
+		}
 
 		ExecutionSummary = new ExecutionSummary();
 
@@ -309,6 +321,17 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink, IDisposab
 			return TestOutcome.Skipped;
 		else
 			return TestOutcome.Passed;
+	}
+
+	static string GetClassName(string fullyQualifiedName)
+	{
+		var parenIndex = fullyQualifiedName.IndexOf('(');
+		var nameWithoutParams = parenIndex >= 0
+			? fullyQualifiedName[..parenIndex]
+			: fullyQualifiedName;
+
+		var lastDot = nameWithoutParams.LastIndexOf('.');
+		return lastDot > 0 ? nameWithoutParams[..lastDot] : nameWithoutParams;
 	}
 
 	public override bool OnMessageWithTypes(

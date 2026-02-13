@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using Xunit.Abstractions;
 using Xunit.Internal;
+using Xunit.Runner.VisualStudio.Sinks;
 
 #if NETCOREAPP
 using System.Text;

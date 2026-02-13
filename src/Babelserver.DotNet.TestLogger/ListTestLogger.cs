@@ -8,13 +8,35 @@ namespace Babelserver.DotNet.TestLogger;
 [FriendlyName("list")]
 public class ListTestLogger : ITestLoggerWithParameters
 {
+    /// <summary>
+    /// TestProperty set by the adapter on each TestCase, containing the total
+    /// number of tests in that test class. Used to detect class completion.
+    /// </summary>
+    public static readonly TestProperty ClassTestCountProperty = TestProperty.Register(
+        "BabelserverClassTestCount", "Babelserver Class Test Count",
+        typeof(int), typeof(ListTestLogger));
+
     private int _totalPassed;
     private int _totalFailed;
     private int _totalSkipped;
-    private bool _verbose;
 
-    // Buffer for grouping parameterized tests
-    private readonly List<TestResult> _pendingResults = [];
+    // Streaming state
+    private string? _activeClass;
+    private readonly Dictionary<string, List<TestResult>> _buffer = new();
+    private readonly Dictionary<string, int> _expectedCountByClass = new();
+    private readonly Dictionary<string, int> _receivedCountByClass = new();
+    private readonly HashSet<string> _completedClasses = [];
+    private readonly HashSet<string> _classHeaderPrinted = [];
+    private bool _headerPrinted;
+    private readonly object _lock = new();
+
+    // Theory grouping state
+    private string? _currentTheoryMethod;
+    private int _theoryRunCount;
+    private int _theoryFailCount;
+    private int _theorySkipCount;
+    private TimeSpan _theoryDuration;
+    private readonly List<TestResult> _theoryFailures = [];
 
     protected virtual bool DefaultVerbose => false;
 
@@ -23,18 +45,246 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     public void Initialize(TestLoggerEvents events, Dictionary<string, string?> parameters)
     {
-        _verbose = DefaultVerbose || (parameters.TryGetValue("verbose", out var verboseValue)
-            && (verboseValue?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false));
-
         events.TestResult += OnTestResult;
         events.TestRunComplete += OnTestRunComplete;
     }
 
     private void OnTestResult(object? sender, TestResultEventArgs e)
     {
-        // Buffer all results - we'll group and print them in OnTestRunComplete
-        // This handles parallel test execution where results arrive out of order
-        _pendingResults.Add(e.Result);
+        lock (_lock)
+        {
+            if (!_headerPrinted)
+            {
+                PrintHeader();
+                _headerPrinted = true;
+            }
+
+            var className = GetClassName(e.Result.TestCase.FullyQualifiedName);
+
+            // Learn expected count from the TestProperty (set by adapter)
+            if (!_expectedCountByClass.ContainsKey(className))
+            {
+                var count = e.Result.TestCase.GetPropertyValue(ClassTestCountProperty, 0);
+                if (count > 0)
+                    _expectedCountByClass[className] = count;
+            }
+
+            _receivedCountByClass[className] = _receivedCountByClass.GetValueOrDefault(className) + 1;
+
+            if (_activeClass == null)
+            {
+                // First result ever — this class becomes active
+                _activeClass = className;
+                PrintClassHeader(className);
+                HandleResult(e.Result);
+            }
+            else if (className == _activeClass)
+            {
+                // Result for active class — print immediately
+                HandleResult(e.Result);
+            }
+            else
+            {
+                // Result for non-active class — buffer it
+                if (!_buffer.TryGetValue(className, out var list))
+                {
+                    list = [];
+                    _buffer[className] = list;
+                }
+                list.Add(e.Result);
+            }
+
+            // Check if this class just completed
+            if (IsClassComplete(className))
+            {
+                _completedClasses.Add(className);
+
+                if (className == _activeClass)
+                    SwitchActiveClass();
+            }
+        }
+    }
+
+    private bool IsClassComplete(string className) =>
+        _expectedCountByClass.TryGetValue(className, out var expected)
+        && _receivedCountByClass.GetValueOrDefault(className) >= expected;
+
+    private void SwitchActiveClass()
+    {
+        FinalizeCurrentTheory();
+
+        // First, flush any completed buffered classes
+        var flushed = true;
+        while (flushed)
+        {
+            flushed = false;
+            foreach (var cls in _buffer.Keys.ToList())
+            {
+                if (!_completedClasses.Contains(cls))
+                    continue;
+
+                Console.WriteLine();
+                PrintClassHeader(cls);
+                foreach (var result in _buffer[cls])
+                    HandleResult(result);
+                FinalizeCurrentTheory();
+                _buffer.Remove(cls);
+                flushed = true;
+            }
+        }
+
+        // Then pick a new active class: the one with the most buffered results
+        string? bestClass = null;
+        var bestCount = 0;
+        foreach (var (cls, results) in _buffer)
+        {
+            if (results.Count > bestCount)
+            {
+                bestCount = results.Count;
+                bestClass = cls;
+            }
+        }
+
+        if (bestClass == null)
+        {
+            _activeClass = null;
+            return;
+        }
+
+        _activeClass = bestClass;
+
+        Console.WriteLine();
+        PrintClassHeader(bestClass);
+
+        // Print buffered results and continue streaming
+        foreach (var result in _buffer[bestClass])
+            HandleResult(result);
+        _buffer.Remove(bestClass);
+    }
+
+    private void PrintClassHeader(string className)
+    {
+        if (!_classHeaderPrinted.Add(className))
+            return;
+
+        Console.WriteLine($"Running {OutputStyle.Cyan}{className}{OutputStyle.Reset}");
+    }
+
+    private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e)
+    {
+        lock (_lock)
+        {
+            if (!_headerPrinted)
+            {
+                PrintHeader();
+                _headerPrinted = true;
+            }
+
+            FinalizeCurrentTheory();
+
+            // Flush any remaining buffered classes
+            foreach (var (className, results) in _buffer.OrderBy(kvp => kvp.Key))
+            {
+                Console.WriteLine();
+                PrintClassHeader(className);
+                foreach (var result in results)
+                    HandleResult(result);
+                FinalizeCurrentTheory();
+            }
+            _buffer.Clear();
+
+            PrintSummary();
+        }
+    }
+
+    private void HandleResult(TestResult result)
+    {
+        var testName = GetTestName(result.TestCase.DisplayName, result.TestCase.FullyQualifiedName);
+        var baseMethod = GetBaseMethodName(testName);
+
+        if (baseMethod != null)
+        {
+            if (baseMethod == _currentTheoryMethod)
+            {
+                // Continuation of current theory
+                AccumulateTheoryRun(result);
+                PrintTheoryProgress();
+            }
+            else
+            {
+                // Start new theory
+                FinalizeCurrentTheory();
+                _currentTheoryMethod = baseMethod;
+                _theoryRunCount = 0;
+                _theoryFailCount = 0;
+                _theorySkipCount = 0;
+                _theoryDuration = TimeSpan.Zero;
+                _theoryFailures.Clear();
+                AccumulateTheoryRun(result);
+                PrintTheoryProgress();
+            }
+        }
+        else
+        {
+            FinalizeCurrentTheory();
+            PrintSingleResult(result);
+        }
+    }
+
+    private void AccumulateTheoryRun(TestResult result)
+    {
+        _theoryRunCount++;
+        _theoryDuration += result.Duration;
+
+        switch (result.Outcome)
+        {
+            case TestOutcome.Passed:
+                _totalPassed++;
+                break;
+            case TestOutcome.Failed:
+                _theoryFailCount++;
+                _theoryFailures.Add(result);
+                _totalFailed++;
+                break;
+            default:
+                _theorySkipCount++;
+                _totalSkipped++;
+                break;
+        }
+    }
+
+    private void PrintTheoryProgress()
+    {
+        string line;
+        if (_theoryFailCount > 0)
+            line = OutputStyle.GroupedFailedResult(_currentTheoryMethod!, _theoryFailCount, _theoryRunCount, _theoryDuration);
+        else if (_theorySkipCount > 0)
+            line = OutputStyle.GroupedSkippedResult(_currentTheoryMethod!, _theorySkipCount, _theoryRunCount);
+        else
+            line = OutputStyle.GroupedPassedResult(_currentTheoryMethod!, _theoryRunCount, _theoryDuration);
+
+        if (_theoryRunCount > 1)
+        {
+            // Move cursor up one line and clear it, then rewrite
+            Console.Write("\u001b[1A\u001b[2K");
+        }
+        Console.WriteLine(line);
+    }
+
+    private void FinalizeCurrentTheory()
+    {
+        if (_currentTheoryMethod == null) return;
+
+        // Print failure details for failed theory runs
+        foreach (var failure in _theoryFailures)
+        {
+            var testName = GetTestName(failure.TestCase.DisplayName, failure.TestCase.FullyQualifiedName);
+            Console.WriteLine($"    {OutputStyle.Red}{testName}{OutputStyle.Reset}");
+            PrintFailureDetails(failure);
+        }
+
+        _currentTheoryMethod = null;
+        _theoryFailures.Clear();
     }
 
     private void PrintSingleResult(TestResult result)
@@ -55,7 +305,6 @@ public class ListTestLogger : ITestLoggerWithParameters
                 break;
 
             case TestOutcome.Skipped:
-                // Skip reason can be in ErrorMessage (from our adapter) or in Messages
                 var reason = result.ErrorMessage
                     ?? result.Messages.FirstOrDefault()?.Text;
                 Console.WriteLine(OutputStyle.SkippedResult(testName, reason));
@@ -75,118 +324,6 @@ public class ListTestLogger : ITestLoggerWithParameters
                 Console.WriteLine(OutputStyle.UnknownResult(testName, result.Outcome.ToString()));
                 _totalSkipped++;
                 break;
-        }
-    }
-
-    private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e)
-    {
-        PrintHeader();
-        PrintAllResults();
-        PrintSummary();
-    }
-
-    private void PrintAllResults()
-    {
-        // Group results by class, then by base method name
-        var resultsByClass = _pendingResults
-            .GroupBy(r => GetClassName(r.TestCase.FullyQualifiedName))
-            .OrderBy(g => g.Key);
-
-        var firstClass = true;
-        foreach (var classGroup in resultsByClass)
-        {
-            if (!firstClass)
-            {
-                Console.WriteLine();
-            }
-            firstClass = false;
-            Console.WriteLine($"Running {OutputStyle.Cyan}{classGroup.Key}{OutputStyle.Reset}");
-
-            var resultsByMethod = classGroup
-                .GroupBy(r => GetBaseMethodName(r.TestCase.FullyQualifiedName))
-                .OrderBy(g => g.Key);
-
-            foreach (var methodGroup in resultsByMethod)
-            {
-                var results = methodGroup.ToList();
-
-                if (_verbose)
-                {
-                    foreach (var result in results)
-                    {
-                        PrintSingleResult(result);
-                    }
-                }
-                else
-                {
-                    PrintGroupedResults(results);
-                }
-            }
-        }
-    }
-
-    private void PrintGroupedResults(List<TestResult> results)
-    {
-        if (results.Count == 0)
-            return;
-
-        var totalRuns = results.Count;
-        var passed = results.Count(r => r.Outcome == TestOutcome.Passed);
-        var failed = results.Count(r => r.Outcome == TestOutcome.Failed);
-        var skipped = results.Count(r => r.Outcome == TestOutcome.Skipped);
-        var totalDuration = TimeSpan.FromTicks(results.Sum(r => r.Duration.Ticks));
-        var baseMethodName = GetBaseMethodName(results[0].TestCase.FullyQualifiedName);
-
-        // Update totals
-        _totalPassed += passed;
-        _totalFailed += failed;
-        _totalSkipped += skipped + results.Count(r =>
-            r.Outcome != TestOutcome.Passed &&
-            r.Outcome != TestOutcome.Failed &&
-            r.Outcome != TestOutcome.Skipped);
-
-        if (totalRuns == 1)
-        {
-            // Single test - print normally (without run count)
-            var result = results[0];
-            var testName = GetTestName(result.TestCase.DisplayName, result.TestCase.FullyQualifiedName);
-
-            Console.WriteLine(result.Outcome switch
-            {
-                TestOutcome.Passed => OutputStyle.PassedResult(testName, result.Duration),
-                TestOutcome.Failed => OutputStyle.FailedResult(testName, result.Duration),
-                TestOutcome.Skipped => OutputStyle.SkippedResult(testName,
-                    result.ErrorMessage ?? result.Messages.FirstOrDefault()?.Text),
-                _ => OutputStyle.UnknownResult(testName, result.Outcome.ToString())
-            });
-
-            if (result.Outcome == TestOutcome.Failed)
-            {
-                PrintFailureDetails(result);
-            }
-        }
-        else if (failed == 0 && skipped == 0)
-        {
-            // All passed
-            Console.WriteLine(OutputStyle.GroupedPassedResult(baseMethodName, totalRuns, totalDuration));
-        }
-        else if (failed > 0)
-        {
-            // Some failed
-            Console.WriteLine(OutputStyle.GroupedFailedResult(baseMethodName, failed, totalRuns, totalDuration));
-
-            // Print failure details for each failed test
-            foreach (var failedResult in results.Where(r => r.Outcome == TestOutcome.Failed))
-            {
-                var testName = GetTestName(failedResult.TestCase.DisplayName, failedResult.TestCase.FullyQualifiedName);
-                Console.WriteLine($"    {OutputStyle.Dim}► {testName}{OutputStyle.Reset}");
-                PrintFailureDetails(failedResult);
-            }
-        }
-        else
-        {
-            // All skipped or mixed skipped/passed
-            Console.WriteLine(OutputStyle.GroupedSkippedResult(baseMethodName, skipped, totalRuns));
         }
     }
 
@@ -239,7 +376,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         }
     }
 
-    private static string GetClassName(string fullyQualifiedName)
+    internal static string GetClassName(string fullyQualifiedName)
     {
         // Format: Namespace.ClassName.MethodName or Namespace.ClassName.MethodName(params)
         var parenIndex = fullyQualifiedName.IndexOf('(');
@@ -251,23 +388,8 @@ public class ListTestLogger : ITestLoggerWithParameters
         return lastDot > 0 ? nameWithoutParams[..lastDot] : nameWithoutParams;
     }
 
-    private static string GetBaseMethodName(string fullyQualifiedName)
-    {
-        // Extract just the method name without parameters
-        // Format: Namespace.ClassName.MethodName or Namespace.ClassName.MethodName(params)
-        var parenIndex = fullyQualifiedName.IndexOf('(');
-        var nameWithoutParams = parenIndex >= 0
-            ? fullyQualifiedName[..parenIndex]
-            : fullyQualifiedName;
-
-        var lastDot = nameWithoutParams.LastIndexOf('.');
-        return lastDot > 0 ? nameWithoutParams[(lastDot + 1)..] : nameWithoutParams;
-    }
-
     private static string GetTestName(string displayName, string fullyQualifiedName)
     {
-        // If the display name contains the method name, use it (handles Theory data)
-        // Otherwise extract just the method name
         var className = GetClassName(fullyQualifiedName);
 
         // ReSharper disable once ConvertIfStatementToReturnStatement
@@ -278,6 +400,12 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         // For Theory tests, the display name might be "MethodName(param1, param2)"
         return displayName;
+    }
+
+    private static string? GetBaseMethodName(string testName)
+    {
+        var parenIndex = testName.IndexOf('(');
+        return parenIndex > 0 ? testName[..parenIndex] : null;
     }
 
 }
