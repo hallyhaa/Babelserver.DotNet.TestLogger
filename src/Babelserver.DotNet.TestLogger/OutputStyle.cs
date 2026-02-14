@@ -2,11 +2,19 @@ namespace Babelserver.DotNet.TestLogger;
 
 internal static class OutputStyle
 {
+#if NETFRAMEWORK
+    // .NET Framework runs only on Windows
+    private static readonly Lazy<bool> LazyUseAscii = new(() =>
+    {
+        var wtSession = Environment.GetEnvironmentVariable("WT_SESSION");
+        var termProgram = Environment.GetEnvironmentVariable("TERM_PROGRAM");
+        return string.IsNullOrEmpty(wtSession) && string.IsNullOrEmpty(termProgram);
+    });
+#else
     // Fallback on Windows w/o modern terminal (matches Gradle plugin logic)
     private static readonly Lazy<bool> LazyUseAscii = new(() =>
     {
-        var isWindows = OperatingSystem.IsWindows();
-        if (!isWindows) return false;
+        if (!OperatingSystem.IsWindows()) return false;
 
         // Check for modern terminal support
         var wtSession = Environment.GetEnvironmentVariable("WT_SESSION");
@@ -14,6 +22,7 @@ internal static class OutputStyle
 
         return string.IsNullOrEmpty(wtSession) && string.IsNullOrEmpty(termProgram);
     });
+#endif
 
     private static bool UseAscii => LazyUseAscii.Value;
 

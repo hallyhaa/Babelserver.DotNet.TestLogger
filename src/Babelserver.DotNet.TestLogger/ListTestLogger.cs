@@ -25,8 +25,8 @@ public class ListTestLogger : ITestLoggerWithParameters
     private readonly Dictionary<string, List<TestResult>> _buffer = new();
     private readonly Dictionary<string, int> _expectedCountByClass = new();
     private readonly Dictionary<string, int> _receivedCountByClass = new();
-    private readonly HashSet<string> _completedClasses = [];
-    private readonly HashSet<string> _classHeaderPrinted = [];
+    private readonly HashSet<string> _completedClasses = new();
+    private readonly HashSet<string> _classHeaderPrinted = new();
     private bool _headerPrinted;
     private readonly object _lock = new();
 
@@ -36,7 +36,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private int _theoryFailCount;
     private int _theorySkipCount;
     private TimeSpan _theoryDuration;
-    private readonly List<TestResult> _theoryFailures = [];
+    private readonly List<TestResult> _theoryFailures = new();
 
     protected virtual bool DefaultVerbose => false;
 
@@ -69,7 +69,8 @@ public class ListTestLogger : ITestLoggerWithParameters
                     _expectedCountByClass[className] = count;
             }
 
-            _receivedCountByClass[className] = _receivedCountByClass.GetValueOrDefault(className) + 1;
+            _receivedCountByClass.TryGetValue(className, out var prevCount);
+            _receivedCountByClass[className] = prevCount + 1;
 
             if (_activeClass == null)
             {
@@ -88,7 +89,7 @@ public class ListTestLogger : ITestLoggerWithParameters
                 // Result for non-active class — buffer it
                 if (!_buffer.TryGetValue(className, out var list))
                 {
-                    list = [];
+                    list = new List<TestResult>();
                     _buffer[className] = list;
                 }
                 list.Add(e.Result);
@@ -107,7 +108,8 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     private bool IsClassComplete(string className) =>
         _expectedCountByClass.TryGetValue(className, out var expected)
-        && _receivedCountByClass.GetValueOrDefault(className) >= expected;
+        && _receivedCountByClass.TryGetValue(className, out var received)
+        && received >= expected;
 
     private void SwitchActiveClass()
     {
@@ -136,12 +138,12 @@ public class ListTestLogger : ITestLoggerWithParameters
         // Then pick a new active class: the one with the most buffered results
         string? bestClass = null;
         var bestCount = 0;
-        foreach (var (cls, results) in _buffer)
+        foreach (var kvp in _buffer)
         {
-            if (results.Count > bestCount)
+            if (kvp.Value.Count > bestCount)
             {
-                bestCount = results.Count;
-                bestClass = cls;
+                bestCount = kvp.Value.Count;
+                bestClass = kvp.Key;
             }
         }
 
@@ -183,11 +185,11 @@ public class ListTestLogger : ITestLoggerWithParameters
             FinalizeCurrentTheory();
 
             // Flush any remaining buffered classes
-            foreach (var (className, results) in _buffer.OrderBy(kvp => kvp.Key))
+            foreach (var kvp in _buffer.OrderBy(x => x.Key))
             {
                 Console.WriteLine();
-                PrintClassHeader(className);
-                foreach (var result in results)
+                PrintClassHeader(kvp.Key);
+                foreach (var result in kvp.Value)
                     HandleResult(result);
                 FinalizeCurrentTheory();
             }
@@ -381,11 +383,11 @@ public class ListTestLogger : ITestLoggerWithParameters
         // Format: Namespace.ClassName.MethodName or Namespace.ClassName.MethodName(params)
         var parenIndex = fullyQualifiedName.IndexOf('(');
         var nameWithoutParams = parenIndex >= 0
-            ? fullyQualifiedName[..parenIndex]
+            ? fullyQualifiedName.Substring(0, parenIndex)
             : fullyQualifiedName;
 
         var lastDot = nameWithoutParams.LastIndexOf('.');
-        return lastDot > 0 ? nameWithoutParams[..lastDot] : nameWithoutParams;
+        return lastDot > 0 ? nameWithoutParams.Substring(0, lastDot) : nameWithoutParams;
     }
 
     private static string GetTestName(string displayName, string fullyQualifiedName)
@@ -395,7 +397,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         // ReSharper disable once ConvertIfStatementToReturnStatement
         if (displayName.StartsWith(className + ".", StringComparison.InvariantCulture))
         {
-            return displayName[(className.Length + 1)..];
+            return displayName.Substring(className.Length + 1);
         }
 
         // For Theory tests, the display name might be "MethodName(param1, param2)"
@@ -405,7 +407,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private static string? GetBaseMethodName(string testName)
     {
         var parenIndex = testName.IndexOf('(');
-        return parenIndex > 0 ? testName[..parenIndex] : null;
+        return parenIndex > 0 ? testName.Substring(0, parenIndex) : null;
     }
 
 }

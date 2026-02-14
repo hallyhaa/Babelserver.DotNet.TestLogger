@@ -327,11 +327,11 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink
 	{
 		var parenIndex = fullyQualifiedName.IndexOf('(');
 		var nameWithoutParams = parenIndex >= 0
-			? fullyQualifiedName[..parenIndex]
+			? fullyQualifiedName.Substring(0, parenIndex)
 			: fullyQualifiedName;
 
 		var lastDot = nameWithoutParams.LastIndexOf('.');
-		return lastDot > 0 ? nameWithoutParams[..lastDot] : nameWithoutParams;
+		return lastDot > 0 ? nameWithoutParams.Substring(0, lastDot) : nameWithoutParams;
 	}
 
 	public override bool OnMessageWithTypes(

@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net462;net6.0</TargetFrameworks>
     <AssemblyName>Babelserver.DotNet.TestAdapter.xUnit.TestAdapter</AssemblyName>
     <RootNamespace>Xunit.Runner.VisualStudio</RootNamespace>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -16,18 +17,35 @@
     <Description>A quiet xUnit test adapter based on xunit.runner.visualstudio that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <DevelopmentDependency>true</DevelopmentDependency>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+
+    <!-- Put DLLs in build/<tfm>/ instead of lib/<tfm>/ (matches xunit.runner.visualstudio) -->
+    <BuildOutputTargetFolder>build</BuildOutputTargetFolder>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- Pack .props into build/<tfm>/ alongside the DLL -->
+  <ItemGroup>
+    <None Include="build\Babelserver.DotNet.TestAdapter.xUnit.props" Pack="true" PackagePath="build\net462\" />
+    <None Include="build\Babelserver.DotNet.TestAdapter.xUnit.props" Pack="true" PackagePath="build\net6.0\" />
+  </ItemGroup>
+
+  <!-- Empty placeholders in lib/ for NuGet framework compatibility -->
+  <ItemGroup>
+    <None Include="_._" Pack="true" PackagePath="lib\net462\_._" />
+    <None Include="_._" Pack="true" PackagePath="lib\net6.0\_._" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.14.1" PrivateAssets="All" />
+    <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" Version="4.3.0" Condition="'$(TargetFramework)' == 'net462'" />
     <PackageReference Include="xunit.runner.reporters" Version="2.9.3" />
   </ItemGroup>
 
