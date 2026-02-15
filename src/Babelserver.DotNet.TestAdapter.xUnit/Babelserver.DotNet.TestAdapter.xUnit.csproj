@@ -12,7 +12,7 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
-    <Version>2.1.0-preview</Version>
+    <Version>2.1.0</Version>
     <Authors>Hallvard</Authors>
     <Description>A quiet xUnit test adapter based on xunit.runner.visualstudio that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>

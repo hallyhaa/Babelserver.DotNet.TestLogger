@@ -10,7 +10,7 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestLogger</PackageId>
-    <Version>2.1.0-preview</Version>
+    <Version>2.1.0</Version>
     <Authors>Hallvard</Authors>
     <Description>A test logger for dotnet test that lists each test with colored output</Description>
     <PackageTags>test;logger;list;colors;xunit;nunit;mstest</PackageTags>
