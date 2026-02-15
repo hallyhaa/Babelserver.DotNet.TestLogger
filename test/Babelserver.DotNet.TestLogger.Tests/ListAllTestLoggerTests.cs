@@ -283,6 +283,35 @@ public class ListTestLoggerTests
     }
 
     [Fact]
+    public void ShowTestListFalse_SuppressesAllOutput()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2, showTestList: false);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom", showTestList: false);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("T E S T S", result);
+        Assert.DoesNotContain("Namespace.ClassA", result);
+        Assert.DoesNotContain("Test1", result);
+        Assert.DoesNotContain("boom", result);
+    }
+
+    [Fact]
+    public void ShowTestListTrue_ShowsOutput()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1, showTestList: true);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("T E S T S", result);
+        Assert.Contains("Test1", result);
+    }
+
+    [Fact]
     public void TheoryResults_CounterUpdatesInPlace()
     {
         var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
@@ -314,7 +343,7 @@ public class ListTestLoggerTests
     }
 
     private static void SendTestResult(ListTestLogger logger, string fullyQualifiedName, TestOutcome outcome,
-        int classTestCount = 0, string? errorMessage = null, bool collapseTheories = true)
+        int classTestCount = 0, string? errorMessage = null, bool collapseTheories = true, bool showTestList = true)
     {
         var testCase = new TestCase(fullyQualifiedName, new Uri("executor://test"), "test.dll")
         {
@@ -324,6 +353,7 @@ public class ListTestLoggerTests
         if (classTestCount > 0)
             testCase.SetPropertyValue(ListTestLogger.ClassTestCountProperty, classTestCount);
         testCase.SetPropertyValue(ListTestLogger.CollapseTheoriesProperty, collapseTheories);
+        testCase.SetPropertyValue(ListTestLogger.ShowTestListProperty, showTestList);
 
         var testResult = new TestResult(testCase)
         {

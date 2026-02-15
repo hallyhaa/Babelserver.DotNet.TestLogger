@@ -93,6 +93,7 @@ In addition, this package adds:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `Babelserver.CollapseTheories` | `true` | Group Theory/MemberData runs into a single line |
+| `Babelserver.ShowTestList` | `true` | Show per-test output (set `false` to behave like standard xUnit) |
 
 ## Requirements
 

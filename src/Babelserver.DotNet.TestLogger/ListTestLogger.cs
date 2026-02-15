@@ -20,6 +20,10 @@ public class ListTestLogger : ITestLoggerWithParameters
         "BabelserverCollapseTheories", "Babelserver Collapse Theories",
         typeof(bool), typeof(ListTestLogger));
 
+    public static readonly TestProperty ShowTestListProperty = TestProperty.Register(
+        "BabelserverShowTestList", "Babelserver Show Test List",
+        typeof(bool), typeof(ListTestLogger));
+
     private int _totalPassed;
     private int _totalFailed;
     private int _totalSkipped;
@@ -32,6 +36,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private readonly HashSet<string> _completedClasses = new();
     private readonly HashSet<string> _classHeaderPrinted = new();
     private bool _headerPrinted;
+    private bool? _showTestList;
     private readonly object _lock = new();
 
     // Theory grouping state
@@ -55,6 +60,14 @@ public class ListTestLogger : ITestLoggerWithParameters
     {
         lock (_lock)
         {
+            _showTestList ??= e.Result.TestCase.GetPropertyValue(ShowTestListProperty, true);
+
+            if (!_showTestList.Value)
+            {
+                CountResult(e.Result);
+                return;
+            }
+
             if (!_headerPrinted)
             {
                 PrintHeader();
@@ -220,6 +233,9 @@ public class ListTestLogger : ITestLoggerWithParameters
     {
         lock (_lock)
         {
+            if (_showTestList == false)
+                return;
+
             if (!_headerPrinted)
             {
                 PrintHeader();
@@ -239,6 +255,22 @@ public class ListTestLogger : ITestLoggerWithParameters
             _buffer.Clear();
 
             PrintSummary();
+        }
+    }
+
+    private void CountResult(TestResult result)
+    {
+        switch (result.Outcome)
+        {
+            case TestOutcome.Passed:
+                _totalPassed++;
+                break;
+            case TestOutcome.Failed:
+                _totalFailed++;
+                break;
+            default:
+                _totalSkipped++;
+                break;
         }
     }
 

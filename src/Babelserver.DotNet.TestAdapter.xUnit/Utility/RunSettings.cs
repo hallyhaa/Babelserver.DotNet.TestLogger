@@ -25,6 +25,7 @@ public class RunSettings
 	public bool? ShadowCopy { get; set; }
 	public bool? ShowLiveOutput { get; set; }
 	public bool? CollapseTheories { get; set; }
+	public bool? ShowTestList { get; set; }
 	public bool? StopOnFail { get; set; }
 	public string? TargetFrameworkVersion { get; set; }
 
@@ -174,6 +175,10 @@ public class RunSettings
 						var collapseTheoriesString = babelserverElement.Element(Constants.Babelserver.CollapseTheories)?.Value;
 						if (bool.TryParse(collapseTheoriesString, out var collapseTheories))
 							result.CollapseTheories = collapseTheories;
+
+						var showTestListString = babelserverElement.Element(Constants.Babelserver.ShowTestList)?.Value;
+						if (bool.TryParse(showTestListString, out var showTestList))
+							result.ShowTestList = showTestList;
 					}
 
 					// Standard settings from VSTest, which can override the user's configured values
@@ -246,6 +251,7 @@ public class RunSettings
 		public static class Babelserver
 		{
 			public const string CollapseTheories = "CollapseTheories";
+			public const string ShowTestList = "ShowTestList";
 		}
 
 		public static class Xunit

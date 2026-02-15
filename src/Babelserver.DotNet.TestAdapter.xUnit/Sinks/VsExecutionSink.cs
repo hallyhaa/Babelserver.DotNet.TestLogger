@@ -22,7 +22,8 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink
 		LoggerHelper logger,
 		Dictionary<string, TestCase> testCasesMap,
 		Func<bool> cancelledThunk,
-		bool collapseTheories = true)
+		bool collapseTheories = true,
+		bool showTestList = true)
 	{
 		this.innerSink = innerSink;
 		this.recorder = recorder;
@@ -42,6 +43,7 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink
 			if (classTestCounts.TryGetValue(className, out var count))
 				tc.SetPropertyValue(ListTestLogger.ClassTestCountProperty, count);
 			tc.SetPropertyValue(ListTestLogger.CollapseTheoriesProperty, collapseTheories);
+			tc.SetPropertyValue(ListTestLogger.ShowTestListProperty, showTestList);
 		}
 
 		ExecutionSummary = new ExecutionSummary();
