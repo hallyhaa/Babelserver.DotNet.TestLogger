@@ -27,13 +27,13 @@ internal static class OutputStyle
     private static bool UseAscii => LazyUseAscii.Value;
 
     // ANSI codes - OK in cmd.exe since Win10, apparently
-    public const string Reset = "\u001b[0m";
-    public const string Bold = "\u001b[1m";
-    public const string Dim = "\u001b[2m";
-    public const string Red = "\u001b[31m";
-    public const string Green = "\u001b[32m";
-    private const string Yellow = "\u001b[33m";
-    public const string Cyan = "\u001b[36m";
+    public const string Reset = "\e[0m";
+    public const string Bold = "\e[1m";
+    public const string Dim = "\e[2m";
+    public const string Red = "\e[31m";
+    public const string Green = "\e[32m";
+    private const string Yellow = "\e[33m";
+    public const string Cyan = "\e[36m";
 
     // Symbols with ASCII fallback
     public static string Passed => UseAscii ? "[PASS]" : "\u2705";   // ✅

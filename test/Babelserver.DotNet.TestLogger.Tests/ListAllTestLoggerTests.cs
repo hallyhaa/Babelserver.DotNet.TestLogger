@@ -322,7 +322,7 @@ public class ListTestLoggerTests
 
         SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Passed, classTestCount: 3);
         // After second, should contain cursor-up ANSI code and "2 runs"
-        Assert.Contains("\u001b[1A", output.ToString());
+        Assert.Contains("\e[1A", output.ToString());
         Assert.Contains("2 runs", output.ToString());
 
         SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 3)", TestOutcome.Passed, classTestCount: 3);

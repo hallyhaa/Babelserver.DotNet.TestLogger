@@ -33,8 +33,8 @@ public class ListTestLogger : ITestLoggerWithParameters
     private readonly Dictionary<string, List<TestResult>> _buffer = new();
     private readonly Dictionary<string, int> _expectedCountByClass = new();
     private readonly Dictionary<string, int> _receivedCountByClass = new();
-    private readonly HashSet<string> _completedClasses = new();
-    private readonly HashSet<string> _classHeaderPrinted = new();
+    private readonly HashSet<string> _completedClasses = [];
+    private readonly HashSet<string> _classHeaderPrinted = [];
     private bool _headerPrinted;
     private bool? _showTestList;
     private readonly object _lock = new();
@@ -45,7 +45,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private int _theoryFailCount;
     private int _theorySkipCount;
     private TimeSpan _theoryDuration;
-    private readonly List<TestResult> _theoryFailures = new();
+    private readonly List<TestResult> _theoryFailures = [];
 
     public void Initialize(TestLoggerEvents events, string testRunDirectory) =>
         Initialize(events, new Dictionary<string, string?>());
@@ -105,15 +105,16 @@ public class ListTestLogger : ITestLoggerWithParameters
                 // Result for non-active class — buffer it
                 if (!_buffer.TryGetValue(className, out var list))
                 {
-                    list = new List<TestResult>();
+                    list = [];
                     _buffer[className] = list;
                 }
                 list.Add(e.Result);
             }
 
-            // Check if this class just completed
+            // ReSharper disable once InvertIf
             if (IsClassComplete(className))
             {
+                // Check if this class just completed
                 _completedClasses.Add(className);
 
                 if (className == _activeClass)
@@ -136,6 +137,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         while (flushed)
         {
             flushed = false;
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var cls in _buffer.Keys.ToList())
             {
                 if (!_completedClasses.Contains(cls))
@@ -187,9 +189,11 @@ public class ListTestLogger : ITestLoggerWithParameters
 
             if (preferNoFailures && bestClass != null)
             {
-                // Prefer non-failed over failed
+                // ReSharper disable once ConvertIfStatementToSwitchStatement
                 if (hasFailures && !bestHasFailures)
+                {
                     continue;
+                }
                 // If this one has no failures but best does, take it
                 if (!hasFailures && bestHasFailures)
                 {
@@ -200,6 +204,7 @@ public class ListTestLogger : ITestLoggerWithParameters
                 }
             }
 
+            // ReSharper disable once InvertIf
             if (kvp.Value.Count > bestCount)
             {
                 bestCount = kvp.Value.Count;
@@ -282,13 +287,7 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         if (baseMethod != null)
         {
-            if (baseMethod == _currentTheoryMethod)
-            {
-                // Continuation of current theory
-                AccumulateTheoryRun(result);
-                PrintTheoryProgress();
-            }
-            else
+            if (baseMethod != _currentTheoryMethod)
             {
                 // Start new theory
                 FinalizeCurrentTheory();
@@ -298,9 +297,10 @@ public class ListTestLogger : ITestLoggerWithParameters
                 _theorySkipCount = 0;
                 _theoryDuration = TimeSpan.Zero;
                 _theoryFailures.Clear();
-                AccumulateTheoryRun(result);
-                PrintTheoryProgress();
             }
+
+            AccumulateTheoryRun(result);
+            PrintTheoryProgress();
         }
         else
         {
@@ -344,7 +344,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         if (_theoryRunCount > 1)
         {
             // Move cursor up one line and clear it, then rewrite
-            Console.Write("\u001b[1A\u001b[2K");
+            Console.Write("\e[1A\e[2K");
         }
         Console.WriteLine(line);
     }
@@ -444,7 +444,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         if (string.IsNullOrEmpty(result.ErrorStackTrace))
             return;
 
-        var lines = result.ErrorStackTrace.Split('\n').Take(5);
+        var lines = result.ErrorStackTrace?.Split('\n').Take(5) ?? [];
         foreach (var line in lines)
         {
             if (!string.IsNullOrWhiteSpace(line))
@@ -454,7 +454,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         }
     }
 
-    internal static string GetClassName(string fullyQualifiedName)
+    private static string GetClassName(string fullyQualifiedName)
     {
         // Format: Namespace.ClassName.MethodName or Namespace.ClassName.MethodName(params)
         var parenIndex = fullyQualifiedName.IndexOf('(');
