@@ -545,7 +545,7 @@ namespace Xunit.Runner.VisualStudio
 
 				reporterMessageHandler.OnMessage(new TestAssemblyExecutionStarting(runInfo.Assembly, executionOptions));
 
-				using var vsExecutionSink = new VsExecutionSink(reporterMessageHandler, frameworkHandle, logger, testCasesMap, () => cancelled);
+				using var vsExecutionSink = new VsExecutionSink(new TestMessageSink(), frameworkHandle, logger, testCasesMap, () => cancelled);
 				var executionSinkOptions = new ExecutionSinkOptions
 				{
 					DiagnosticMessageSink = diagnosticsSinkRemote,
@@ -560,12 +560,8 @@ namespace Xunit.Runner.VisualStudio
 					resultsSink.Finished.WaitOne();
 				}
 
-				reporterMessageHandler.OnMessage(new TestAssemblyExecutionFinished(runInfo.Assembly, executionOptions, resultsSink.ExecutionSummary));
 				if ((resultsSink.ExecutionSummary.Failed != 0 || resultsSink.ExecutionSummary.Errors != 0) && executionOptions.GetStopOnTestFailOrDefault())
-				{
-					logger.Log("Canceling due to test failure...");
 					cancelled = true;
-				}
 			}
 			catch (Exception ex)
 			{

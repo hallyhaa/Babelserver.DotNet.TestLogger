@@ -202,6 +202,53 @@ public class ListTestLoggerTests
     }
 
     [Fact]
+    public void FailingBufferedClass_DeferredToEnd()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        // ClassA: active (2 tests), ClassB: buffered with failure (1 test), ClassC: buffered passing (1 test)
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassB.Test1", TestOutcome.Failed, classTestCount: 1, errorMessage: "boom");
+        SendTestResult(logger, "Namespace.ClassC.Test1", TestOutcome.Passed, classTestCount: 1);
+
+        // Complete ClassA → should flush ClassC (passing) before ClassB (failing)
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Passed, classTestCount: 2);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        var posC = result.IndexOf("Namespace.ClassC", StringComparison.Ordinal);
+        var posB = result.IndexOf("Namespace.ClassB", StringComparison.Ordinal);
+        Assert.True(posC > 0, "ClassC should appear in output");
+        Assert.True(posB > 0, "ClassB should appear in output");
+        Assert.True(posC < posB, "Passing ClassC should appear before failing ClassB");
+    }
+
+    [Fact]
+    public void MultipleFailingClasses_AllDeferredToEnd()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        // ClassA: active (2 tests), ClassB: failing, ClassC: passing, ClassD: failing — all buffered
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassB.Test1", TestOutcome.Failed, classTestCount: 1, errorMessage: "fail1");
+        SendTestResult(logger, "Namespace.ClassC.Test1", TestOutcome.Passed, classTestCount: 1);
+        SendTestResult(logger, "Namespace.ClassD.Test1", TestOutcome.Failed, classTestCount: 1, errorMessage: "fail2");
+        // Complete ClassA → triggers flush of buffered classes
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Passed, classTestCount: 2);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        var posC = result.IndexOf("Namespace.ClassC", StringComparison.Ordinal);
+        var posB = result.IndexOf("Namespace.ClassB", StringComparison.Ordinal);
+        var posD = result.IndexOf("Namespace.ClassD", StringComparison.Ordinal);
+
+        // Passing ClassC before failing classes (B, D)
+        Assert.True(posC > 0, "ClassC should appear in output");
+        Assert.True(posC < posB, "Passing ClassC should appear before failing ClassB");
+        Assert.True(posC < posD, "Passing ClassC should appear before failing ClassD");
+    }
+
+    [Fact]
     public void TheoryResults_CounterUpdatesInPlace()
     {
         var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();

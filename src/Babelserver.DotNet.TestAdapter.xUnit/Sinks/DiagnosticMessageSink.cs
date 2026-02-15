@@ -29,4 +29,5 @@ public class DiagnosticMessageSink : DiagnosticEventSink
 
 		return result;
 	}
+
 }

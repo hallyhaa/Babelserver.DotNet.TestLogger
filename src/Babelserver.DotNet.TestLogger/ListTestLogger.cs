@@ -74,8 +74,9 @@ public class ListTestLogger : ITestLoggerWithParameters
 
             if (_activeClass == null)
             {
-                // First result ever — this class becomes active
                 _activeClass = className;
+                if (_classHeaderPrinted.Count > 0)
+                    Console.WriteLine();
                 PrintClassHeader(className);
                 HandleResult(e.Result);
             }
@@ -115,7 +116,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     {
         FinalizeCurrentTheory();
 
-        // First, flush any completed buffered classes
+        // First, flush any completed buffered classes that have no failures
         var flushed = true;
         while (flushed)
         {
@@ -124,28 +125,16 @@ public class ListTestLogger : ITestLoggerWithParameters
             {
                 if (!_completedClasses.Contains(cls))
                     continue;
+                if (BufferHasFailures(cls))
+                    continue;
 
-                Console.WriteLine();
-                PrintClassHeader(cls);
-                foreach (var result in _buffer[cls])
-                    HandleResult(result);
-                FinalizeCurrentTheory();
-                _buffer.Remove(cls);
+                FlushBufferedClass(cls);
                 flushed = true;
             }
         }
 
-        // Then pick a new active class: the one with the most buffered results
-        string? bestClass = null;
-        var bestCount = 0;
-        foreach (var kvp in _buffer)
-        {
-            if (kvp.Value.Count > bestCount)
-            {
-                bestCount = kvp.Value.Count;
-                bestClass = kvp.Key;
-            }
-        }
+        // Pick a new active class: prefer classes without failures, then most buffered results
+        var bestClass = PickBestBufferedClass(preferNoFailures: true);
 
         if (bestClass == null)
         {
@@ -162,6 +151,59 @@ public class ListTestLogger : ITestLoggerWithParameters
         foreach (var result in _buffer[bestClass])
             HandleResult(result);
         _buffer.Remove(bestClass);
+    }
+
+    private static bool BufferHasFailures(string className, Dictionary<string, List<TestResult>> buffer) =>
+        buffer.TryGetValue(className, out var results)
+        && results.Exists(r => r.Outcome == TestOutcome.Failed);
+
+    private bool BufferHasFailures(string className) =>
+        BufferHasFailures(className, _buffer);
+
+    private string? PickBestBufferedClass(bool preferNoFailures)
+    {
+        string? bestClass = null;
+        var bestCount = 0;
+        var bestHasFailures = true;
+
+        foreach (var kvp in _buffer)
+        {
+            var hasFailures = kvp.Value.Exists(r => r.Outcome == TestOutcome.Failed);
+
+            if (preferNoFailures && bestClass != null)
+            {
+                // Prefer non-failed over failed
+                if (hasFailures && !bestHasFailures)
+                    continue;
+                // If this one has no failures but best does, take it
+                if (!hasFailures && bestHasFailures)
+                {
+                    bestClass = kvp.Key;
+                    bestCount = kvp.Value.Count;
+                    bestHasFailures = false;
+                    continue;
+                }
+            }
+
+            if (kvp.Value.Count > bestCount)
+            {
+                bestCount = kvp.Value.Count;
+                bestClass = kvp.Key;
+                bestHasFailures = hasFailures;
+            }
+        }
+
+        return bestClass;
+    }
+
+    private void FlushBufferedClass(string className)
+    {
+        Console.WriteLine();
+        PrintClassHeader(className);
+        foreach (var result in _buffer[className])
+            HandleResult(result);
+        FinalizeCurrentTheory();
+        _buffer.Remove(className);
     }
 
     private void PrintClassHeader(string className)
@@ -184,15 +226,14 @@ public class ListTestLogger : ITestLoggerWithParameters
 
             FinalizeCurrentTheory();
 
-            // Flush any remaining buffered classes
-            foreach (var kvp in _buffer.OrderBy(x => x.Key))
-            {
-                Console.WriteLine();
-                PrintClassHeader(kvp.Key);
-                foreach (var result in kvp.Value)
-                    HandleResult(result);
-                FinalizeCurrentTheory();
-            }
+            // Flush remaining buffered classes: passing first, then failing
+            var passingClasses = _buffer.Where(kvp => !kvp.Value.Exists(r => r.Outcome == TestOutcome.Failed))
+                .OrderBy(kvp => kvp.Key).Select(kvp => kvp.Key).ToList();
+            var failingClasses = _buffer.Where(kvp => kvp.Value.Exists(r => r.Outcome == TestOutcome.Failed))
+                .OrderBy(kvp => kvp.Key).Select(kvp => kvp.Key).ToList();
+
+            foreach (var className in passingClasses.Concat(failingClasses))
+                FlushBufferedClass(className);
             _buffer.Clear();
 
             PrintSummary();
