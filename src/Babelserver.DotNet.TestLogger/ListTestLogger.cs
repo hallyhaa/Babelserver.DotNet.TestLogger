@@ -16,6 +16,10 @@ public class ListTestLogger : ITestLoggerWithParameters
         "BabelserverClassTestCount", "Babelserver Class Test Count",
         typeof(int), typeof(ListTestLogger));
 
+    public static readonly TestProperty CollapseTheoriesProperty = TestProperty.Register(
+        "BabelserverCollapseTheories", "Babelserver Collapse Theories",
+        typeof(bool), typeof(ListTestLogger));
+
     private int _totalPassed;
     private int _totalFailed;
     private int _totalSkipped;
@@ -37,8 +41,6 @@ public class ListTestLogger : ITestLoggerWithParameters
     private int _theorySkipCount;
     private TimeSpan _theoryDuration;
     private readonly List<TestResult> _theoryFailures = new();
-
-    protected virtual bool DefaultVerbose => false;
 
     public void Initialize(TestLoggerEvents events, string testRunDirectory) =>
         Initialize(events, new Dictionary<string, string?>());
@@ -243,7 +245,8 @@ public class ListTestLogger : ITestLoggerWithParameters
     private void HandleResult(TestResult result)
     {
         var testName = GetTestName(result.TestCase.DisplayName, result.TestCase.FullyQualifiedName);
-        var baseMethod = GetBaseMethodName(testName);
+        var collapseTheories = result.TestCase.GetPropertyValue(CollapseTheoriesProperty, true);
+        var baseMethod = collapseTheories ? GetBaseMethodName(testName) : null;
 
         if (baseMethod != null)
         {

@@ -5,10 +5,14 @@ by Maven's Surefire output and matching the [Gradle Test Logger Plugin](https://
 
 ## Features
 
+- **Streaming output** — results print per class as each class completes, not at the end
+- **Failing classes last** — classes with test failures are deferred to the end of output
+- **Theory grouping** — parameterized tests grouped into a single line with live-updating run count
 - Shows pass/fail/skip status for each individual test
 - Displays a summary with test counts
 - Skip reasons displayed when available
 - Error messages and stack traces included for failed tests
+- Suppresses all `[xUnit.net ...]` noise during execution
 
 ## Sample Output
 
@@ -47,7 +51,7 @@ Running MyProject.Tests.UserServiceTests
 Add to your test project's `.csproj`:
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="2.0.0" />
+<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="2.1.0-preview" />
 ```
 
 This single package includes both an xUnit adapter that suppresses xUnit's console noise and the
@@ -56,18 +60,9 @@ Babelserver.DotNet.TestLogger implementation of Microsoft.VisualStudio.TestPlatf
 **Important:** Do remove `xunit.runner.visualstudio` from your project (this package replaces it). If both are present,
 tests may run twice and xUnit's console noise will reappear.
 
-## Loggers
+## Theory Grouping
 
-Two loggers are available:
-
-| Logger | Command | Description |
-|--------|---------|-------------|
-| `list` | `dotnet test` | Groups parameterized tests (Theory/InlineData) into a single line |
-| `listAll` | `dotnet test --logger listAll` | Shows every test run individually |
-
-### Grouped output (default)
-
-Parameterized tests are grouped into a single line:
+Parameterized tests are grouped into a single line by default:
 ```
   ✅ MyTheoryTest (4 runs) (10ms)
 ```
@@ -79,20 +74,30 @@ If some runs fail, details are shown:
     Error: Assert.Equal() Failure...
 ```
 
-### Verbose output
-
-Use `--logger listAll` to see every parameterized test individually:
-```
-  ✅ MyTheoryTest(input: 1, expected: 2) (2ms)
-  ✅ MyTheoryTest(input: 2, expected: 4) (1ms)
-  ✅ MyTheoryTest(input: 3, expected: 6) (0ms)
+To disable grouping and show each parameterized run individually:
+```bash
+dotnet test -- Babelserver.CollapseTheories=false
 ```
 
+## Configuration
+
+All standard [xUnit configuration options](https://xunit.net/docs/configuration-files) are supported via CLI:
+
+```bash
+dotnet test -- xUnit.ParallelizeTestCollections=false
+dotnet test -- xUnit.StopOnFail=true
+```
+
+In addition, this package adds:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `Babelserver.CollapseTheories` | `true` | Group Theory/MemberData runs into a single line |
 
 ## Requirements
 
-- .NET 8.0 or later
-- xUnit 2.x (for the xUnit adapter)
+- .NET 6.0+ or .NET Framework 4.6.2+
+- xUnit 2.x
 
 ## Related Packages
 
@@ -116,5 +121,9 @@ output suppression. This means you get **full compatibility** with the official 
 For documentation on these features, see the official [xUnit documentation](https://xunit.net/docs/configuration-files).
 We have used v2.8.2 of xunit.runner.visualstudio as the base for our fork.
 
-The only difference from xunit.runner.visualstudio is that xUnit's console noise is suppressed, replaced by the clean
-formatted output from our TestLogger.
+The differences from xunit.runner.visualstudio are:
+
+- xUnit's console noise (`[xUnit.net ...]` messages during execution) is suppressed
+- Test results stream per class as each class completes, rather than all at once at the end
+- Classes with failures are shown last, so passing output isn't interrupted by error details
+- The clean formatted output comes from our TestLogger

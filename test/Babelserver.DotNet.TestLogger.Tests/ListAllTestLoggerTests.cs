@@ -202,6 +202,40 @@ public class ListTestLoggerTests
     }
 
     [Fact]
+    public void CollapseTheoriesFalse_ShowsEachRunIndividually()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 3, collapseTheories: false);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Passed, classTestCount: 3, collapseTheories: false);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 3)", TestOutcome.Passed, classTestCount: 3, collapseTheories: false);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        // Each parameterized run should appear individually
+        Assert.Contains("x: 1", result);
+        Assert.Contains("x: 2", result);
+        Assert.Contains("x: 3", result);
+        // Should NOT show grouped "runs" output
+        Assert.DoesNotContain("runs", result);
+    }
+
+    [Fact]
+    public void CollapseTheoriesTrue_GroupsRuns()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 3, collapseTheories: true);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Passed, classTestCount: 3, collapseTheories: true);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 3)", TestOutcome.Passed, classTestCount: 3, collapseTheories: true);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("3 runs", result);
+        Assert.DoesNotContain("x: 1", result);
+    }
+
+    [Fact]
     public void FailingBufferedClass_DeferredToEnd()
     {
         var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
@@ -280,7 +314,7 @@ public class ListTestLoggerTests
     }
 
     private static void SendTestResult(ListTestLogger logger, string fullyQualifiedName, TestOutcome outcome,
-        int classTestCount = 0, string? errorMessage = null)
+        int classTestCount = 0, string? errorMessage = null, bool collapseTheories = true)
     {
         var testCase = new TestCase(fullyQualifiedName, new Uri("executor://test"), "test.dll")
         {
@@ -289,6 +323,7 @@ public class ListTestLoggerTests
 
         if (classTestCount > 0)
             testCase.SetPropertyValue(ListTestLogger.ClassTestCountProperty, classTestCount);
+        testCase.SetPropertyValue(ListTestLogger.CollapseTheoriesProperty, collapseTheories);
 
         var testResult = new TestResult(testCase)
         {

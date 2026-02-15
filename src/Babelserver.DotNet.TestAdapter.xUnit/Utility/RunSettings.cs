@@ -24,6 +24,7 @@ public class RunSettings
 	public string? ReporterSwitch { get; set; }
 	public bool? ShadowCopy { get; set; }
 	public bool? ShowLiveOutput { get; set; }
+	public bool? CollapseTheories { get; set; }
 	public bool? StopOnFail { get; set; }
 	public string? TargetFrameworkVersion { get; set; }
 
@@ -166,6 +167,15 @@ public class RunSettings
 							result.StopOnFail = stopOnFail;
 					}
 
+					// Custom settings for Babelserver
+					var babelserverElement = runSettingsElement.Element("Babelserver");
+					if (babelserverElement is not null)
+					{
+						var collapseTheoriesString = babelserverElement.Element(Constants.Babelserver.CollapseTheories)?.Value;
+						if (bool.TryParse(collapseTheoriesString, out var collapseTheories))
+							result.CollapseTheories = collapseTheories;
+					}
+
 					// Standard settings from VSTest, which can override the user's configured values
 					var runConfigurationElement = runSettingsElement.Element("RunConfiguration");
 					if (runConfigurationElement is not null)
@@ -231,6 +241,11 @@ public class RunSettings
 			public const string NoAutoReporters = "NoAutoReporters";
 			public const string ReporterSwitch = "ReporterSwitch";
 			public const string TargetFrameworkVersion = "TargetFrameworkVersion";
+		}
+
+		public static class Babelserver
+		{
+			public const string CollapseTheories = "CollapseTheories";
 		}
 
 		public static class Xunit

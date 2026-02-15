@@ -21,7 +21,8 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink
 		ITestExecutionRecorder recorder,
 		LoggerHelper logger,
 		Dictionary<string, TestCase> testCasesMap,
-		Func<bool> cancelledThunk)
+		Func<bool> cancelledThunk,
+		bool collapseTheories = true)
 	{
 		this.innerSink = innerSink;
 		this.recorder = recorder;
@@ -34,12 +35,13 @@ public sealed class VsExecutionSink : TestMessageSink, IExecutionSink
 			.GroupBy(tc => GetClassName(tc.FullyQualifiedName))
 			.ToDictionary(g => g.Key, g => g.Count());
 
-		// Set class count property on each TestCase so the logger can detect class completion
+		// Set properties on each TestCase so the logger can detect class completion and collapse behaviour
 		foreach (var tc in testCasesMap.Values)
 		{
 			var className = GetClassName(tc.FullyQualifiedName);
 			if (classTestCounts.TryGetValue(className, out var count))
 				tc.SetPropertyValue(ListTestLogger.ClassTestCountProperty, count);
+			tc.SetPropertyValue(ListTestLogger.CollapseTheoriesProperty, collapseTheories);
 		}
 
 		ExecutionSummary = new ExecutionSummary();
