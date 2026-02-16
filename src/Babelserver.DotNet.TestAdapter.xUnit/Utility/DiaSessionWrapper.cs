@@ -1,10 +1,12 @@
+#pragma warning disable CA1513 // ObjectDisposedException.ThrowIf is not available in net472
+
 using System;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Navigation;
-using Xunit.Abstractions;
 using Xunit.Internal;
+using Xunit.Runner.Common;
 
-namespace Xunit.Runner.VisualStudio.Utility;
+namespace Xunit.Runner.VisualStudio;
 
 // This class wraps DiaSession, and uses DiaSessionWrapperHelper to discover when a test is an async test
 // (since that requires special handling by DIA). The wrapper helper needs to exist in a separate AppDomain
@@ -12,17 +14,19 @@ namespace Xunit.Runner.VisualStudio.Utility;
 class DiaSessionWrapper : IDisposable
 {
 #if NETFRAMEWORK
-	readonly AppDomainManager? appDomainManager;
+	AppDomainManager? appDomainManager;
 #endif
+	readonly DiagnosticMessageSink diagnosticMessageSink;
+	readonly object disposalLock = new();
+	bool disposed;
 	readonly DiaSessionWrapperHelper? helper;
-	readonly DiaSession? session;
-	readonly DiagnosticMessageSink internalDiagnosticMessageSink;
+	DiaSession? session;
 
 	public DiaSessionWrapper(
 		string assemblyFileName,
-		DiagnosticMessageSink internalDiagnosticMessageSink)
+		DiagnosticMessageSink diagnosticMessageSink)
 	{
-		this.internalDiagnosticMessageSink = Guard.ArgumentNotNull(internalDiagnosticMessageSink);
+		this.diagnosticMessageSink = Guard.ArgumentNotNull(diagnosticMessageSink);
 
 		try
 		{
@@ -30,7 +34,7 @@ class DiaSessionWrapper : IDisposable
 		}
 		catch (Exception ex)
 		{
-			internalDiagnosticMessageSink.OnMessage(new DiagnosticMessage($"Exception creating DiaSession: {ex}"));
+			diagnosticMessageSink.OnMessage(new InternalDiagnosticMessage($"Exception creating DiaSession: {ex}"));
 		}
 
 		try
@@ -48,7 +52,7 @@ class DiaSessionWrapper : IDisposable
 		}
 		catch (Exception ex)
 		{
-			internalDiagnosticMessageSink.OnMessage(new DiagnosticMessage($"Exception creating DiaSessionWrapperHelper: {ex}"));
+			diagnosticMessageSink.OnMessage(new DiagnosticMessage($"Exception creating DiaSessionWrapperHelper: {ex}"));
 		}
 	}
 
@@ -66,16 +70,27 @@ class DiaSessionWrapper : IDisposable
 		}
 		catch (Exception ex)
 		{
-			internalDiagnosticMessageSink.OnMessage(new DiagnosticMessage($"Exception getting source mapping for {typeName}.{methodName}: {ex}"));
+			diagnosticMessageSink.OnMessage(new DiagnosticMessage($"Exception getting source mapping for {typeName}.{methodName}: {ex}"));
 			return null;
 		}
 	}
 
 	public void Dispose()
 	{
-		session?.Dispose();
+		lock (disposalLock)
+		{
+			if (disposed)
+				return;
+
+			disposed = true;
+
+			session.SafeDispose();
+			session = null;
+
 #if NETFRAMEWORK
-		appDomainManager?.Dispose();
+			appDomainManager.SafeDispose();
+			appDomainManager = null;
 #endif
+		}
 	}
 }

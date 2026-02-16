@@ -1,33 +1,20 @@
+using Xunit.Runner.Common;
+
 namespace Xunit.Runner.VisualStudio;
 
-public class DiagnosticMessageSink : DiagnosticEventSink
+internal class DiagnosticMessageSink : DiagnosticEventSink
 {
-	DiagnosticMessageSink()
-	{ }
-
-	public static DiagnosticMessageSink ForDiagnostics(
+	public DiagnosticMessageSink(
 		LoggerHelper log,
-		string assemblyDisplayName,
-		bool showDiagnostics)
+		string? assemblyDisplayName = null,
+		bool showDiagnostics = false,
+		bool showInternalDiagnostics = false)
 	{
-		var result = new DiagnosticMessageSink();
+		var header = assemblyDisplayName is null ? string.Empty : assemblyDisplayName + ": ";
 
 		if (showDiagnostics)
-			result.DiagnosticMessageEvent += args => log.LogWarning("{0}: {1}", assemblyDisplayName, args.Message.Message);
-
-		return result;
+			DiagnosticMessageEvent += args => log.LogWarning("{0}{1}", header, args.Message.Message);
+		if (showInternalDiagnostics)
+			InternalDiagnosticMessageEvent += args => log.Log("{0}", args.Message.Message);
 	}
-
-	public static DiagnosticMessageSink ForInternalDiagnostics(
-		LoggerHelper log,
-		bool showDiagnostics)
-	{
-		var result = new DiagnosticMessageSink();
-
-		if (showDiagnostics)
-			result.DiagnosticMessageEvent += args => log.Log("{0}", args.Message.Message);
-
-		return result;
-	}
-
 }
