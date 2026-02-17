@@ -1,16 +1,22 @@
 using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Xunit.Runner.Common;
+using Xunit.Sdk;
 
 namespace Xunit.Runner.VisualStudio;
 
-public class RunSettings
+internal class RunSettings
 {
 	public AppDomainSupport? AppDomain { get; set; }
-	public bool CollectSourceInformation { get; set; } = true;
+	public int? AssertEquivalentMaxDepth { get; set; }
+	public bool? CollectSourceInformation { get; set; }
+	public string? Culture { get; set; }
+	public bool DesignMode { get; set; } = false;
 	public bool? DiagnosticMessages { get; set; }
-	public bool DisableSerialization { get; set; } = false;
+	public ExplicitOption? Explicit { get; set; }
 	public bool? FailSkips { get; set; }
+	public bool? FailWarns { get; set; }
 	public bool? InternalDiagnosticMessages { get; set; }
 	public int? LongRunningTestSeconds { get; set; }
 	public int? MaxParallelThreads { get; set; }
@@ -21,22 +27,45 @@ public class RunSettings
 	public bool? ParallelizeAssembly { get; set; }
 	public bool? ParallelizeTestCollections { get; set; }
 	public bool? PreEnumerateTheories { get; set; }
+	public int? PrintMaxEnumerableLength { get; set; }
+	public int? PrintMaxObjectDepth { get; set; }
+	public int? PrintMaxObjectMemberCount { get; set; }
+	public int? PrintMaxStringLength { get; set; }
 	public string? ReporterSwitch { get; set; }
+	public int? Seed { get; set; }
 	public bool? ShadowCopy { get; set; }
 	public bool? ShowLiveOutput { get; set; }
-	public bool? CollapseTheories { get; set; }
-	public bool? ShowTestList { get; set; }
 	public bool? StopOnFail { get; set; }
 	public string? TargetFrameworkVersion { get; set; }
+
+	// Custom settings for Babelserver
+	public bool? CollapseTheories { get; set; }
+	public bool? ShowTestList { get; set; }
+	public bool? SuppressConsoleOutput { get; set; }
 
 	public void CopyTo(TestAssemblyConfiguration configuration)
 	{
 		if (AppDomain.HasValue)
 			configuration.AppDomain = AppDomain;
+		if (AssertEquivalentMaxDepth.HasValue)
+			configuration.AssertEquivalentMaxDepth = AssertEquivalentMaxDepth;
+		if (CollectSourceInformation.HasValue)
+			configuration.IncludeSourceInformation = CollectSourceInformation;
+		if (Culture is not null)
+			configuration.Culture = Culture.ToUpperInvariant() switch
+			{
+				"DEFAULT" => null,
+				"INVARIANT" => string.Empty,
+				_ => Culture,
+			};
 		if (DiagnosticMessages.HasValue)
 			configuration.DiagnosticMessages = DiagnosticMessages;
+		if (Explicit.HasValue)
+			configuration.ExplicitOption = Explicit;
 		if (FailSkips.HasValue)
 			configuration.FailSkips = FailSkips;
+		if (FailWarns.HasValue)
+			configuration.FailTestsWithWarnings = FailWarns;
 		if (InternalDiagnosticMessages.HasValue)
 			configuration.InternalDiagnosticMessages = InternalDiagnosticMessages;
 		if (LongRunningTestSeconds.HasValue)
@@ -55,6 +84,16 @@ public class RunSettings
 			configuration.ParallelizeTestCollections = ParallelizeTestCollections;
 		if (PreEnumerateTheories.HasValue)
 			configuration.PreEnumerateTheories = PreEnumerateTheories;
+		if (PrintMaxEnumerableLength.HasValue)
+			configuration.PrintMaxEnumerableLength = PrintMaxEnumerableLength;
+		if (PrintMaxObjectDepth.HasValue)
+			configuration.PrintMaxObjectDepth = PrintMaxObjectDepth;
+		if (PrintMaxObjectMemberCount.HasValue)
+			configuration.PrintMaxObjectMemberCount = PrintMaxObjectMemberCount;
+		if (PrintMaxStringLength.HasValue)
+			configuration.PrintMaxStringLength = PrintMaxStringLength;
+		if (Seed.HasValue)
+			configuration.Seed = Seed;
 		if (ShadowCopy.HasValue)
 			configuration.ShadowCopy = ShadowCopy;
 		if (ShowLiveOutput.HasValue)
@@ -83,13 +122,27 @@ public class RunSettings
 						if (Enum.TryParse<AppDomainSupport>(appDomainString, ignoreCase: true, out var appDomain))
 							result.AppDomain = appDomain;
 
+						var assertEquivalentMaxDepthString = xunitElement.Element(Constants.Xunit.AssertEquivalentMaxDepth)?.Value;
+						if (int.TryParse(assertEquivalentMaxDepthString, out var assertEquivalentMaxDepth) && assertEquivalentMaxDepth >= 1)
+							result.AssertEquivalentMaxDepth = assertEquivalentMaxDepth;
+
+						result.Culture = xunitElement.Element(Constants.Xunit.Culture)?.Value;
+
 						var diagnosticMessagesString = xunitElement.Element(Constants.Xunit.DiagnosticMessages)?.Value;
 						if (bool.TryParse(diagnosticMessagesString, out var diagnosticMessages))
 							result.DiagnosticMessages = diagnosticMessages;
 
+						var explicitString = xunitElement.Element(Constants.Xunit.Explicit)?.Value;
+						if (Enum.TryParse<ExplicitOption>(explicitString, ignoreCase: true, out var @explicit))
+							result.Explicit = @explicit;
+
 						var failSkipsString = xunitElement.Element(Constants.Xunit.FailSkips)?.Value;
 						if (bool.TryParse(failSkipsString, out var failSkips))
 							result.FailSkips = failSkips;
+
+						var failWarnsString = xunitElement.Element(Constants.Xunit.FailWarns)?.Value;
+						if (bool.TryParse(failWarnsString, out var failWarns))
+							result.FailWarns = failWarns;
 
 						var internalDiagnosticMessagesString = xunitElement.Element(Constants.Xunit.InternalDiagnosticMessages)?.Value;
 						if (bool.TryParse(internalDiagnosticMessagesString, out var internalDiagnosticMessages))
@@ -151,9 +204,29 @@ public class RunSettings
 						if (bool.TryParse(preEnumerateTheoriesString, out var preEnumerateTheories))
 							result.PreEnumerateTheories = preEnumerateTheories;
 
+						var printMaxEnumerableLengthString = xunitElement.Element(Constants.Xunit.PrintMaxEnumerableLength)?.Value;
+						if (int.TryParse(printMaxEnumerableLengthString, out var printMaxEnumerableLength) && printMaxEnumerableLength >= 0)
+							result.PrintMaxEnumerableLength = printMaxEnumerableLength;
+
+						var printMaxObjectDepthString = xunitElement.Element(Constants.Xunit.PrintMaxObjectDepth)?.Value;
+						if (int.TryParse(printMaxObjectDepthString, out var printMaxObjectDepth) && printMaxObjectDepth >= 0)
+							result.PrintMaxObjectDepth = printMaxObjectDepth;
+
+						var printMaxObjectMemberCountString = xunitElement.Element(Constants.Xunit.PrintMaxObjectMemberCount)?.Value;
+						if (int.TryParse(printMaxObjectMemberCountString, out var printMaxObjectMemberCount) && printMaxObjectMemberCount >= 0)
+							result.PrintMaxObjectMemberCount = printMaxObjectMemberCount;
+
+						var printMaxStringLengthString = xunitElement.Element(Constants.Xunit.PrintMaxStringLength)?.Value;
+						if (int.TryParse(printMaxStringLengthString, out var printMaxStringLength) && printMaxStringLength >= 0)
+							result.PrintMaxStringLength = printMaxStringLength;
+
 						var reporterSwitchString = xunitElement.Element(Constants.Xunit.ReporterSwitch)?.Value;
 						if (reporterSwitchString is not null)
 							result.ReporterSwitch = reporterSwitchString;
+
+						var seedString = xunitElement.Element(Constants.Xunit.Seed)?.Value;
+						if (int.TryParse(seedString, NumberStyles.None, NumberFormatInfo.CurrentInfo, out var seed))
+							result.Seed = seed;
 
 						var shadowCopyString = xunitElement.Element(Constants.Xunit.ShadowCopy)?.Value;
 						if (bool.TryParse(shadowCopyString, out var shadowCopy))
@@ -179,6 +252,10 @@ public class RunSettings
 						var showTestListString = babelserverElement.Element(Constants.Babelserver.ShowTestList)?.Value;
 						if (bool.TryParse(showTestListString, out var showTestList))
 							result.ShowTestList = showTestList;
+
+						var suppressConsoleOutputString = babelserverElement.Element(Constants.Babelserver.SuppressConsoleOutput)?.Value;
+						if (bool.TryParse(suppressConsoleOutputString, out var suppressConsoleOutput))
+							result.SuppressConsoleOutput = suppressConsoleOutput;
 					}
 
 					// Standard settings from VSTest, which can override the user's configured values
@@ -191,8 +268,7 @@ public class RunSettings
 
 						var designModeString = runConfigurationElement.Element(Constants.RunConfiguration.DesignMode)?.Value;
 						if (bool.TryParse(designModeString, out var designMode))
-							// Design mode == running inside the IDE (where we need serialization)
-							result.DisableSerialization = !designMode;
+							result.DesignMode = designMode;
 
 						var disableAppDomainString = runConfigurationElement.Element(Constants.RunConfiguration.DisableAppDomain)?.Value;
 						if (bool.TryParse(disableAppDomainString, out var disableAppDomain))
@@ -238,41 +314,51 @@ public class RunSettings
 		// https://learn.microsoft.com/en-us/visualstudio/test/configure-unit-tests-by-using-a-dot-runsettings-file?view=vs-2022#runconfiguration-element
 		public static class RunConfiguration
 		{
-			public const string CollectSourceInformation = "CollectSourceInformation";
-			public const string DesignMode = "DesignMode";
-			public const string DisableAppDomain = "DisableAppDomain";
-			public const string DisableParallelization = "DisableParallelization";
-			public const string InternalDiagnostics = "InternalDiagnostics";
-			public const string NoAutoReporters = "NoAutoReporters";
-			public const string ReporterSwitch = "ReporterSwitch";
-			public const string TargetFrameworkVersion = "TargetFrameworkVersion";
+			public const string CollectSourceInformation = nameof(CollectSourceInformation);
+			public const string DesignMode = nameof(DesignMode);
+			public const string DisableAppDomain = nameof(DisableAppDomain);
+			public const string DisableParallelization = nameof(DisableParallelization);
+			public const string InternalDiagnostics = nameof(InternalDiagnostics);
+			public const string NoAutoReporters = nameof(NoAutoReporters);
+			public const string ReporterSwitch = nameof(ReporterSwitch);
+			public const string TargetFrameworkVersion = nameof(TargetFrameworkVersion);
 		}
 
 		public static class Babelserver
 		{
-			public const string CollapseTheories = "CollapseTheories";
-			public const string ShowTestList = "ShowTestList";
+			public const string CollapseTheories = nameof(CollapseTheories);
+			public const string ShowTestList = nameof(ShowTestList);
+			public const string SuppressConsoleOutput = nameof(SuppressConsoleOutput);
 		}
 
 		public static class Xunit
 		{
-			public const string AppDomain = "AppDomain";
-			public const string DiagnosticMessages = "DiagnosticMessages";
-			public const string FailSkips = "FailSkips";
-			public const string InternalDiagnosticMessages = "InternalDiagnosticMessages";
-			public const string LongRunningTestSeconds = "LongRunningTestSeconds";
-			public const string MaxParallelThreads = "MaxParallelThreads";
-			public const string MethodDisplay = "MethodDisplay";
-			public const string MethodDisplayOptions = "MethodDisplayOptions";
-			public const string NoAutoReporters = "NoAutoReporters";
-			public const string ParallelAlgorithm = "ParallelAlgorithm";
-			public const string ParallelizeAssembly = "ParallelizeAssembly";
-			public const string ParallelizeTestCollections = "ParallelizeTestCollections";
-			public const string PreEnumerateTheories = "PreEnumerateTheories";
-			public const string ReporterSwitch = "ReporterSwitch";
-			public const string ShadowCopy = "ShadowCopy";
-			public const string ShowLiveOutput = "ShowLiveOutput";
-			public const string StopOnFail = "StopOnFail";
+			public const string AppDomain = nameof(AppDomain);
+			public const string AssertEquivalentMaxDepth = nameof(AssertEquivalentMaxDepth);
+			public const string Culture = nameof(Culture);
+			public const string DiagnosticMessages = nameof(DiagnosticMessages);
+			public const string Explicit = nameof(Explicit);
+			public const string FailSkips = nameof(FailSkips);
+			public const string FailWarns = nameof(FailWarns);
+			public const string InternalDiagnosticMessages = nameof(InternalDiagnosticMessages);
+			public const string LongRunningTestSeconds = nameof(LongRunningTestSeconds);
+			public const string MaxParallelThreads = nameof(MaxParallelThreads);
+			public const string MethodDisplay = nameof(MethodDisplay);
+			public const string MethodDisplayOptions = nameof(MethodDisplayOptions);
+			public const string NoAutoReporters = nameof(NoAutoReporters);
+			public const string ParallelAlgorithm = nameof(ParallelAlgorithm);
+			public const string ParallelizeAssembly = nameof(ParallelizeAssembly);
+			public const string ParallelizeTestCollections = nameof(ParallelizeTestCollections);
+			public const string PreEnumerateTheories = nameof(PreEnumerateTheories);
+			public const string PrintMaxEnumerableLength = nameof(PrintMaxEnumerableLength);
+			public const string PrintMaxObjectDepth = nameof(PrintMaxObjectDepth);
+			public const string PrintMaxObjectMemberCount = nameof(PrintMaxObjectMemberCount);
+			public const string PrintMaxStringLength = nameof(PrintMaxStringLength);
+			public const string Seed = nameof(Seed);
+			public const string ReporterSwitch = nameof(ReporterSwitch);
+			public const string ShadowCopy = nameof(ShadowCopy);
+			public const string ShowLiveOutput = nameof(ShowLiveOutput);
+			public const string StopOnFail = nameof(StopOnFail);
 		}
 	}
 

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net462;net6.0</TargetFrameworks>
+    <TargetFrameworks>net472;net8.0</TargetFrameworks>
     <AssemblyName>Babelserver.DotNet.TestAdapter.xUnit.TestAdapter</AssemblyName>
     <RootNamespace>Xunit.Runner.VisualStudio</RootNamespace>
     <LangVersion>latest</LangVersion>
@@ -10,9 +10,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CS0436</NoWarn>
 
+    <!-- Force NuGet DLLs to output dir so ILRepack can merge them (same as upstream) -->
+    <CopyLocalLockFileAssemblies Condition=" '$(TargetFramework)' == 'net8.0' ">true</CopyLocalLockFileAssemblies>
+
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
-    <Version>2.1.0</Version>
     <Authors>Hallvard</Authors>
     <Description>A quiet xUnit test adapter based on xunit.runner.visualstudio that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>
@@ -33,25 +35,91 @@
 
   <!-- Pack .props into build/<tfm>/ alongside the DLL -->
   <ItemGroup>
-    <None Include="build\Babelserver.DotNet.TestAdapter.xUnit.props" Pack="true" PackagePath="build\net462\" />
-    <None Include="build\Babelserver.DotNet.TestAdapter.xUnit.props" Pack="true" PackagePath="build\net6.0\" />
+    <None Include="build\Babelserver.DotNet.TestAdapter.xUnit.props" Pack="true" PackagePath="build\net472\" />
+    <None Include="build\Babelserver.DotNet.TestAdapter.xUnit.props" Pack="true" PackagePath="build\net8.0\" />
   </ItemGroup>
 
   <!-- Empty placeholders in lib/ for NuGet framework compatibility -->
   <ItemGroup>
-    <None Include="_._" Pack="true" PackagePath="lib\net462\_._" />
-    <None Include="_._" Pack="true" PackagePath="lib\net6.0\_._" />
+    <None Include="_._" Pack="true" PackagePath="lib\net472\_._" />
+    <None Include="_._" Pack="true" PackagePath="lib\net8.0\_._" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.14.1" PrivateAssets="All" />
-    <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" Version="4.3.0" Condition="'$(TargetFramework)' == 'net462'" />
-    <PackageReference Include="xunit.runner.reporters" Version="2.9.3" />
+    <PackageReference Include="ILRepack" Version="2.0.44">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3.runner.utility" Version="3.1.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <!-- Polyfill modern attributes (DoesNotReturn, etc.) for net472 — same as upstream -->
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+    <PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[9.0.7]" />
+    <PackageReference Include="TunnelVisionLabs.ReferenceAssemblyAnnotator" Version="1.0.0-alpha.160" PrivateAssets="All" />
   </ItemGroup>
 
   <!-- Include the TestLogger automatically -->
   <ItemGroup>
     <ProjectReference Include="..\Babelserver.DotNet.TestLogger\Babelserver.DotNet.TestLogger.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Babelserver.DotNet.TestLogger.Tests" />
+  </ItemGroup>
+
+  <!-- ILRepack: merge xunit.v3 dependencies into the adapter DLL (same as upstream) -->
+  <Target
+      Name="ILRepack"
+      AfterTargets="Build"
+      Condition=" '$(TargetFramework)' != '' ">
+    <PropertyGroup>
+      <OutputAssembly>$([System.IO.Path]::Combine($(TargetDir), "merged", "$(TargetFileName)"))</OutputAssembly>
+    </PropertyGroup>
+
+    <Message Text="$(TargetName) -> $(OutputAssembly)" Importance="High" />
+    <CallTarget Targets="ILRepackConditional" />
+  </Target>
+
+  <Target
+      Name="ILRepackConditional"
+      Inputs="$(TargetPath)"
+      Outputs="$(TargetDir)merged\$(TargetFileName)">
+
+    <MakeDir Directories="$(TargetDir)merged" />
+
+    <PropertyGroup>
+      <MainAssembly>$([System.IO.Path]::Combine($(TargetDir), "$(TargetFileName)"))</MainAssembly>
+      <OutputAssembly>$([System.IO.Path]::Combine($(TargetDir), "merged", "$(TargetFileName)"))</OutputAssembly>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ILRepackExclusions Include="$(TargetDir)xunit.abstractions.dll;$(TargetDir)Microsoft.TestPlatform.*.dll;$(TargetDir)Microsoft.VisualStudio.*.dll;$(TargetDir)Babelserver.DotNet.TestLogger.TestLogger.dll" />
+      <ILRepackDependencies
+          Include="$(TargetDir)*.dll"
+          Exclude="$(MainAssembly);@(ILRepackExclusions)"/>
+      <ILRepackLibPaths Include="$(TargetDir)" />
+      <ILRepackLibPaths Include="$(TargetFrameworkRootPath)$(TargetFrameworkIdentifier)\$(TargetFrameworkVersion)\" Condition=" '$(TargetFrameworkRootPath)' != '' " />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ILRepackExclusions)" DestinationFolder="$(TargetDir)merged" />
+    <Exec
+        StandardOutputImportance="low"
+        IgnoreStandardErrorWarningFormat="true"
+        Command="dotnet &quot;$(ILRepack)&quot; -internalize -ndebug @(ILRepackLibPaths->'-lib:%(FullPath)', ' ') -out:$(OutputAssembly) $(MainAssembly) @(ILRepackDependencies, ' ')" />
+  </Target>
+
+  <!-- After ILRepack, overwrite the original adapter DLL with the merged version
+       so that SDK auto-packaging picks up the merged DLL -->
+  <Target Name="CopyMergedAssembly" AfterTargets="ILRepack" Condition=" '$(TargetFramework)' != '' AND Exists('$(TargetDir)merged\$(TargetFileName)') ">
+    <Copy SourceFiles="$(TargetDir)merged\$(TargetFileName)" DestinationFiles="$(TargetPath)" />
+  </Target>
+
+  <!-- Include xunit.abstractions.dll in the NuGet package alongside the adapter DLL -->
+  <Target Name="IncludeXunitAbstractionsInPackage" BeforeTargets="_GetBuildOutputFilesWithTfm" Condition=" '$(TargetFramework)' != '' ">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(TargetDir)xunit.abstractions.dll" TargetPath="xunit.abstractions.dll" />
+    </ItemGroup>
+  </Target>
 
 </Project>

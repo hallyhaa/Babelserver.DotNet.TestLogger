@@ -1,11 +1,11 @@
 namespace Xunit.Runner.VisualStudio;
 
-public static class Constants
+internal static class Constants
 {
 #if NETFRAMEWORK
-	public const string ExecutorUri = "executor://xunit/VsTestRunner2/net";
+	public const string ExecutorUri = "executor://xunit/VsTestRunner3/netfx/";
 #elif NETCOREAPP
-	public const string ExecutorUri = "executor://xunit/VsTestRunner2/netcoreapp";
+	public const string ExecutorUri = "executor://xunit/VsTestRunner3/netcore/";
 #else
 #error Unknown target platform
 #endif

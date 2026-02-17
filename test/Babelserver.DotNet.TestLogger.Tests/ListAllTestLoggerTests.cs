@@ -236,6 +236,47 @@ public class ListTestLoggerTests
     }
 
     [Fact]
+    public void ConsecutiveTheories_NoBlankLinesBetween()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        // Two consecutive theories in the same class
+        SendTestResult(logger, "Namespace.ClassA.TheoryA(x: 1)", TestOutcome.Passed, classTestCount: 5);
+        SendTestResult(logger, "Namespace.ClassA.TheoryA(x: 2)", TestOutcome.Passed, classTestCount: 5);
+        SendTestResult(logger, "Namespace.ClassA.TheoryB(y: 1)", TestOutcome.Passed, classTestCount: 5);
+        SendTestResult(logger, "Namespace.ClassA.TheoryB(y: 2)", TestOutcome.Passed, classTestCount: 5);
+        SendTestResult(logger, "Namespace.ClassA.TheoryB(y: 3)", TestOutcome.Passed, classTestCount: 5);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("2 runs", result);  // TheoryA
+        Assert.Contains("3 runs", result);  // TheoryB
+
+        // Strip ANSI escape codes to get visible lines
+        var visibleLines = GetVisibleLines(result);
+
+        // Find the two theory result lines
+        var theoryALine = visibleLines.FindIndex(l => l.Contains("TheoryA") && l.Contains("2 runs"));
+        var theoryBLine = visibleLines.FindIndex(l => l.Contains("TheoryB") && l.Contains("3 runs"));
+
+        Assert.True(theoryALine >= 0, "TheoryA grouped line should exist");
+        Assert.True(theoryBLine >= 0, "TheoryB grouped line should exist");
+        Assert.Equal(theoryALine + 1, theoryBLine); // Adjacent, no blank line between
+    }
+
+    /// <summary>
+    /// Strips ANSI escape codes and returns non-empty visible lines.
+    /// </summary>
+    private static List<string> GetVisibleLines(string rawOutput)
+    {
+        var stripped = System.Text.RegularExpressions.Regex.Replace(rawOutput, @"\e\[[^A-Za-z]*[A-Za-z]", "");
+        return stripped.Split('\n')
+            .Select(l => l.TrimEnd('\r'))
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToList();
+    }
+
+    [Fact]
     public void FailingBufferedClass_DeferredToEnd()
     {
         var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
@@ -312,21 +353,20 @@ public class ListTestLoggerTests
     }
 
     [Fact]
-    public void TheoryResults_CounterUpdatesInPlace()
+    public void TheoryResults_PrintedOnlyOnceWhenComplete()
     {
         var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
 
         SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 3);
-        // After first result, should show "1 run"
-        Assert.Contains("1 run)", output.ToString());
+        // During accumulation, no output yet for the theory
+        Assert.DoesNotContain("runs", output.ToString());
 
         SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Passed, classTestCount: 3);
-        // After second, should contain cursor-up ANSI code and "2 runs"
-        Assert.Contains("\e[1A", output.ToString());
-        Assert.Contains("2 runs", output.ToString());
+        Assert.DoesNotContain("runs", output.ToString());
 
         SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 3)", TestOutcome.Passed, classTestCount: 3);
         CompleteTestRun(logger);
+        // After completion, the grouped result appears exactly once
         Assert.Contains("3 runs", output.ToString());
     }
 

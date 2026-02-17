@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -6,17 +7,14 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
-using Xunit.Abstractions;
 using Xunit.Internal;
-using Xunit.Runner.VisualStudio.Sinks;
-
-#if NETCOREAPP
-using System.Text;
-using Internal.Microsoft.Extensions.DependencyModel;
-#endif
+using Xunit.Runner.Common;
+using Xunit.Sdk;
+using Xunit.v3;
 
 namespace Xunit.Runner.VisualStudio
 {
@@ -27,6 +25,7 @@ namespace Xunit.Runner.VisualStudio
 	[Category("managed")]
 	public class VsTestRunner : ITestDiscoverer, ITestExecutor
 	{
+		bool cancelled;
 		static int printedHeader = 0;
 
 #if NETCOREAPP
@@ -51,32 +50,44 @@ namespace Xunit.Runner.VisualStudio
 			"xunit.runner.visualstudio.testadapter.dll",
 			"xunit.runner.visualstudio.dotnetcore.testadapter.dll",
 
-			// xUnit.net v3 (core)
-			"xunit.v3.assert.dll",
-			"xunit.v3.common.dll",
-			"xunit.v3.core.dll",
+			// xUnit.net runner (console)
+			"xunit.console.clr4.exe",           // v1
+			"xunit.console.clr4.x86.exe",       // v1
+			"xunit.console.exe",                // v1, v2
+			"xunit.console.x86.exe",            // v1, v2
+			"xunit.v3.runner.console.exe",      // v3
+			"xunit.v3.runner.console.x86.exe",  // v3
 
-			// xUnit.net v3 (runners)
-			"xunit.v3.runner.common.dll",
-			"xunit.v3.runner.inproc.console.dll",
-			"xunit.v3.runner.tdnet.dll",
-			"xunit.v3.runner.utility.net472.dll",
-			"xunit.v3.runner.utility.netstandard20.dll",
+			// xUnit.net runner (GUI)
+			"xunit.gui.clr4.exe",      // v1
+			"xunit.gui.clr4.x86.exe",  // v1
+			"xunit.gui.exe",           // v1
+			"xunit.gui.x86.exe",       // v1
 
-			// xUnit.net v2 (core)
-			"xunit.abstractions.dll",
-			"xunit.assert.dll",
-			"xunit.core.dll",
-			"xunit.execution.desktop.dll",        // 2.0.0+
-			"xunit.execution.iOS-Universal.dll",  // 2.0.0
-			"xunit.execution.MonoAndroid.dll",    // 2.0.0
-			"xunit.execution.MonoTouch.dll",      // 2.0.0
-			"xunit.execution.universal.dll",      // 2.0.0
-			"xunit.execution.win8.dll",           // 2.0.0
-			"xunit.execution.wp8.dll",            // 2.0.0
-			"xunit.execution.dotnet.dll",         // 2.1.0+
+			// xUnit.net runner (MSBuild)
+			"xunit.runner.msbuild.dll",     // v1, v2
+			"xunit.v3.runner.msbuild.dll",  // v3
 
-			// xUnit.net v2 (runners)
+			// xUnit.net runner (TestDriven.net)
+			"xunit.runner.tdnet.dll",  // v1, v2
+
+			// xUnit.net v1
+			"xunit.dll",
+			"xunit.extensions.dll",
+			"xunit.runner.utility.dll",
+
+			// xUnit.net v2
+			"xunit.abstractions.dll",                    // 2.0.0+
+			"xunit.assert.dll",                          // 2.0.0+
+			"xunit.core.dll",                            // 2.0.0+
+			"xunit.execution.desktop.dll",               // 2.0.0+
+			"xunit.execution.iOS-Universal.dll",         // 2.0.0
+			"xunit.execution.MonoAndroid.dll",           // 2.0.0
+			"xunit.execution.MonoTouch.dll",             // 2.0.0
+			"xunit.execution.universal.dll",             // 2.0.0
+			"xunit.execution.win8.dll",                  // 2.0.0
+			"xunit.execution.wp8.dll",                   // 2.0.0
+			"xunit.execution.dotnet.dll",                // 2.1.0+
 			"xunit.runner.reporters.desktop.dll",        // 2.1.0
 			"xunit.runner.reporters.dotnet.dll",         // 2.1.0
 			"xunit.runner.reporters.net452.dll",         // 2.2.0+
@@ -84,37 +95,54 @@ namespace Xunit.Runner.VisualStudio
 			"xunit.runner.reporters.netstandard15.dll",  // 2.2.0+
 			"xunit.runner.reporters.netstandard20.dll",  // 2.4.0
 			"xunit.runner.reporters.netcoreapp10.dll",   // 2.3.0+
-			"xunit.runner.tdnet.dll",
-			"xunit.runner.utility.iOS-Universal.dll",  // 2.0.0
-			"xunit.runner.utility.MonoAndroid.dll",    // 2.0.0
-			"xunit.runner.utility.MonoTouch.dll",      // 2.0.0
-			"xunit.runner.utility.universal.dll",      // 2.0.0
-			"xunit.runner.utility.win8.dll",           // 2.0.0
-			"xunit.runner.utility.wp8.dll",            // 2.0.0
-			"xunit.runner.utility.desktop.dll",        // 2.1.0
-			"xunit.runner.utility.dotnet.dll",         // 2.1.0
-			"xunit.runner.utility.net35.dll",          // 2.2.0+
-			"xunit.runner.utility.net452.dll",         // 2.2.0+
-			"xunit.runner.utility.netstandard11.dll",  // 2.2.0+
-			"xunit.runner.utility.netstandard15.dll",  // 2.2.0+
-			"xunit.runner.utility.netcoreapp10.dll",   // 2.3.0+
-			"xunit.runner.utility.netstandard20.dll",  // 2.4.0
-			"xunit.runner.utility.uwp10.dll",          // 2.4.0-2.4.2
+			"xunit.runner.utility.iOS-Universal.dll",    // 2.0.0
+			"xunit.runner.utility.MonoAndroid.dll",      // 2.0.0
+			"xunit.runner.utility.MonoTouch.dll",        // 2.0.0
+			"xunit.runner.utility.universal.dll",        // 2.0.0
+			"xunit.runner.utility.win8.dll",             // 2.0.0
+			"xunit.runner.utility.wp8.dll",              // 2.0.0
+			"xunit.runner.utility.desktop.dll",          // 2.1.0
+			"xunit.runner.utility.dotnet.dll",           // 2.1.0
+			"xunit.runner.utility.net35.dll",            // 2.2.0+
+			"xunit.runner.utility.net452.dll",           // 2.2.0+
+			"xunit.runner.utility.netstandard11.dll",    // 2.2.0+
+			"xunit.runner.utility.netstandard15.dll",    // 2.2.0+
+			"xunit.runner.utility.netcoreapp10.dll",     // 2.3.0+
+			"xunit.runner.utility.netstandard20.dll",    // 2.4.0
+			"xunit.runner.utility.uwp10.dll",            // 2.4.0-2.4.2
 
-			// xUnit.net v1
-			"xunit.dll",
+			// xUnit.net v3
+			"xunit.v3.assert.dll",                  // 1.0.0+
+			"xunit.v3.common.dll",                  // 1.0.0+
+			"xunit.v3.core.dll",                    // 1.0.0+
+			"xunit.v3.runner.common.dll",           // 1.0.0+
+			"xunit.v3.runner.inproc.console.dll",   // 1.0.0+
+			"xunit.v3.runner.utility.netfx.dll",    // 1.0.0+
+			"xunit.v3.runner.utility.netcore.dll",  // 1.0.0+
 		};
 
-		public static TestProperty SerializedTestCaseProperty { get; } = GetTestProperty();
+		internal static TestProperty ManagedMethodProperty { get; } =
+			TestProperty.Register("TestCase.ManagedMethod", "ManagedMethod", string.Empty, string.Empty, typeof(string), x => !string.IsNullOrWhiteSpace(x as string), TestPropertyAttributes.Hidden, typeof(TestCase));
 
-		bool cancelled;
+		internal static TestProperty ManagedTypeProperty { get; } =
+			TestProperty.Register("TestCase.ManagedType", "ManagedType", string.Empty, string.Empty, typeof(string), x => !string.IsNullOrWhiteSpace(x as string), TestPropertyAttributes.Hidden, typeof(TestCase));
 
-		public void Cancel()
-		{
+		internal static TestProperty SkipReasonProperty { get; } =
+			TestProperty.Register("XunitSkipReason", "xUnit.net Skip Reason", typeof(string), typeof(VsTestRunner));
+
+		internal static TestProperty TestCaseExplicitProperty { get; } =
+			TestProperty.Register("XunitTestCaseExplicit", "xUnit.net Test Case Explicit Flag", typeof(bool), typeof(VsTestRunner));
+
+		internal static TestProperty TestCaseSerializationProperty { get; } =
+			TestProperty.Register("XunitTestCaseSerialization", "xUnit.net Test Case Serialization", typeof(string), typeof(VsTestRunner));
+
+		internal static TestProperty TestCaseUniqueIDProperty { get; } =
+			TestProperty.Register("XunitTestCaseUniqueID", "xUnit.net Test Case Unique ID", typeof(string), typeof(VsTestRunner));
+
+		public void Cancel() =>
 			cancelled = true;
-		}
 
-		void ITestDiscoverer.DiscoverTests(
+		public void DiscoverTests(
 			IEnumerable<string> sources,
 			IDiscoveryContext discoveryContext,
 			IMessageLogger logger,
@@ -133,117 +161,69 @@ namespace Xunit.Runner.VisualStudio
 			if (!runSettings.IsMatchingTargetFramework())
 				return;
 
-			var testPlatformContext = new TestPlatformContext
-			{
-				// Force serialization because in either case (command line discovery or IDE discovery) we may be
-				// asked later to run specific test cases, so we can't rely on DesignMode to make the decision.
-				RequireSerialization = true,
-				RequireSourceInformation = runSettings.CollectSourceInformation,
-			};
+			using var _ = AssemblyHelper.SubscribeResolveForAssembly(typeof(VsTestRunner), new DiagnosticMessageSink(loggerHelper, showInternalDiagnostics: runSettings.InternalDiagnosticMessages ?? false));
+
+			// Force design mode to enable serialization because in either case (command line discovery or IDE discovery) we may be
+			// asked later to run specific test cases, so we can't rely on DesignMode to make the decision.
+			var testPlatformContext = new TestPlatformContext { DesignMode = true };
 
 			var testCaseFilter = new TestCaseFilter(discoveryContext, loggerHelper);
+
+			// We can't use await here because the contract from VSTest says we have to wait for everything to finish
+			// before returning from this function.
 			DiscoverTests(
-				sources, loggerHelper, testPlatformContext, runSettings,
-				(source, discoverer, discoveryOptions) => new VsDiscoverySink(source, discoverer, loggerHelper, discoverySink, discoveryOptions, testPlatformContext, testCaseFilter, () => cancelled)
-			);
+				sources, loggerHelper, runSettings,
+				(source, discoverer, discoveryOptions) => new VsDiscoverySink(source, loggerHelper, discoverySink, discoveryOptions, testPlatformContext, testCaseFilter, () => cancelled)
+			).GetAwaiter().GetResult();
 		}
 
-		static void PrintHeader(LoggerHelper loggerHelper)
-		{
-			if (Interlocked.Exchange(ref printedHeader, 1) == 0)
-				loggerHelper.Log($"xUnit.net VSTest Adapter v2.8.2 (Babelserver quiet fork) ({IntPtr.Size * 8}-bit {RuntimeInformation.FrameworkDescription})");
-		}
-
-		void ITestExecutor.RunTests(
-			IEnumerable<string>? sources,
-			IRunContext? runContext,
-			IFrameworkHandle? frameworkHandle)
-		{
-			if (sources is null)
-				return;
-
-			var stopwatch = Stopwatch.StartNew();
-			var logger = new LoggerHelper(frameworkHandle, stopwatch);
-
-			PrintHeader(logger);
-
-			var runSettings = RunSettings.Parse(runContext?.RunSettings?.SettingsXml);
-			if (!runSettings.IsMatchingTargetFramework())
-				return;
-
-			var testPlatformContext = new TestPlatformContext
-			{
-				RequireSerialization = !runSettings.DisableSerialization,
-				RequireSourceInformation = runSettings.CollectSourceInformation,
-			};
-
-			RunTests(
-				runContext, frameworkHandle, logger, testPlatformContext, runSettings,
-				() => sources.Select(source => new AssemblyRunInfo(runSettings, GetAssemblyFileName(source))).ToList()
-			);
-		}
-
-		void ITestExecutor.RunTests(
-			IEnumerable<TestCase>? tests,
-			IRunContext? runContext,
-			IFrameworkHandle? frameworkHandle)
-		{
-			if (tests is null)
-				return;
-
-			var stopwatch = Stopwatch.StartNew();
-			var logger = new LoggerHelper(frameworkHandle, stopwatch);
-			var runSettings = RunSettings.Parse(runContext?.RunSettings?.SettingsXml);
-
-			PrintHeader(logger);
-
-			var testPlatformContext = new TestPlatformContext
-			{
-				RequireSerialization = !runSettings.DisableSerialization,
-				RequireSourceInformation = runSettings.CollectSourceInformation,
-			};
-
-			RunTests(
-				runContext, frameworkHandle, logger, testPlatformContext, runSettings,
-				() =>
-					tests
-						.GroupBy(testCase => testCase.Source)
-						.Select(group => new AssemblyRunInfo(runSettings, group.Key, group.ToList()))
-						.ToList()
-			);
-		}
-
-		// Helpers
-
-		void DiscoverTests<TVisitor>(
+		async Task DiscoverTests<TVisitor>(
 			IEnumerable<string> sources,
 			LoggerHelper logger,
-			TestPlatformContext testPlatformContext,
 			RunSettings runSettings,
-			Func<string, ITestFrameworkDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor> visitorFactory,
-			Action<string, ITestFrameworkDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor>? visitComplete = null)
+			Func<string, IFrontControllerDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor> visitorFactory,
+			Action<string, IFrontControllerDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor>? visitComplete = null)
 				where TVisitor : IVsDiscoverySink, IDisposable
 		{
 			try
 			{
 				RemotingUtility.CleanUpRegisteredChannels();
 
-				var internalDiagnosticsSinkLocal = DiagnosticMessageSink.ForInternalDiagnostics(logger, runSettings.InternalDiagnosticMessages ?? false);
-				using var _ = AssemblyHelper.SubscribeResolveForAssembly(typeof(VsTestRunner), MessageSinkAdapter.Wrap(internalDiagnosticsSinkLocal));
+				var project = new XunitProject();
 
 				foreach (var assemblyFileNameCanBeWithoutAbsolutePath in sources)
 				{
-					var assembly = new XunitProjectAssembly { AssemblyFilename = GetAssemblyFileName(assemblyFileNameCanBeWithoutAbsolutePath) };
+					var assemblyFileName = Path.GetFullPath(assemblyFileNameCanBeWithoutAbsolutePath);
+					var metadata = AssemblyUtility.GetAssemblyMetadata(assemblyFileName);
+					// Silently ignore anything which doesn't look like a test project, because reporting it just throws
+					// lots of warnings into the test output window as Test Explorer asks you to enumerate tests for every
+					// assembly you build in your solution, not just the ones with references to this runner.
+					if (metadata is null || metadata.XunitVersion == 0)
+						return;
+
+					var assembly = new XunitProjectAssembly(project, assemblyFileName, metadata);
+
+					var configWarnings = new List<string>();
+					ConfigReader.Load(assembly.Configuration, assembly.AssemblyFileName, assembly.ConfigFileName, configWarnings);
 					runSettings.CopyTo(assembly.Configuration);
 
-					var fileName = Path.GetFileNameWithoutExtension(assembly.AssemblyFilename);
-					var shadowCopy = assembly.Configuration.ShadowCopyOrDefault;
-					var diagnosticsSinkLocal = DiagnosticMessageSink.ForDiagnostics(logger, fileName, assembly.Configuration.DiagnosticMessagesOrDefault);
-					var appDomain = assembly.Configuration.AppDomain ?? AppDomainDefaultBehavior;
+					// Pre-enumerate theories by default, so that we can see all traits, including those that come from
+					// ITheoryDataRow in v3. See: https://github.com/xunit/visualstudio.xunit/issues/426
+					assembly.Configuration.PreEnumerateTheories ??= true;
 
-					using var sourceInformationProvider = new VisualStudioSourceInformationProvider(assembly.AssemblyFilename, internalDiagnosticsSinkLocal);
-					using var controller = new XunitFrontController(appDomain, assembly.AssemblyFilename, shadowCopy: shadowCopy, sourceInformationProvider: sourceInformationProvider, diagnosticMessageSink: MessageSinkAdapter.Wrap(diagnosticsSinkLocal));
-					if (!DiscoverTestsInSource(controller, logger, testPlatformContext, runSettings, visitorFactory, visitComplete, assembly))
+					foreach (var warning in configWarnings)
+						logger.LogWarning("{0}", warning);
+
+					var assemblyDisplayName = Path.GetFileNameWithoutExtension(assembly.AssemblyFileName);
+					var diagnosticMessageSink = new DiagnosticMessageSink(logger, assemblyDisplayName, assembly.Configuration.DiagnosticMessagesOrDefault, assembly.Configuration.InternalDiagnosticMessagesOrDefault);
+
+					await using var sourceInformationProvider = new VisualStudioSourceInformationProvider(assemblyFileName, diagnosticMessageSink);
+					await using var controller = XunitFrontController.Create(assembly, sourceInformationProvider, diagnosticMessageSink);
+					if (controller is null)
+						return;
+
+					var discoveryOptions = TestFrameworkOptions.ForDiscovery(assembly.Configuration);
+					if (!await DiscoverTestsInAssembly(controller, logger, runSettings, visitorFactory, visitComplete, assembly, discoveryOptions))
 						break;
 				}
 			}
@@ -253,56 +233,62 @@ namespace Xunit.Runner.VisualStudio
 			}
 		}
 
-		bool DiscoverTestsInSource<TVisitor>(
-			XunitFrontController controller,
+		async Task<bool> DiscoverTestsInAssembly<TVisitor>(
+			IFrontControllerDiscoverer controller,
 			LoggerHelper logger,
-			TestPlatformContext testPlatformContext,
 			RunSettings runSettings,
-			Func<string, ITestFrameworkDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor> visitorFactory,
-			Action<string, ITestFrameworkDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor>? visitComplete,
-			XunitProjectAssembly assembly)
+			Func<string, IFrontControllerDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor> visitorFactory,
+			Action<string, IFrontControllerDiscoverer, ITestFrameworkDiscoveryOptions, TVisitor>? visitComplete,
+			XunitProjectAssembly assembly,
+			ITestFrameworkDiscoveryOptions discoveryOptions)
 				where TVisitor : IVsDiscoverySink, IDisposable
 		{
-			foreach (var warning in assembly.ConfigWarnings)
-				logger.LogWarning("{0}", warning);
-
-			if (cancelled)
+			if (cancelled || assembly.AssemblyFileName is null || assembly.AssemblyMetadata is null)
 				return false;
+
+			using var _ = AssemblyHelper.SubscribeResolveForAssembly(assembly.AssemblyFileName, new DiagnosticMessageSink(logger, showDiagnostics: assembly.Configuration.DiagnosticMessagesOrDefault, showInternalDiagnostics: assembly.Configuration.DiagnosticMessagesOrDefault));
 
 			var fileName = "(unknown assembly)";
 
 			try
 			{
-				var reporterMessageHandler = GetRunnerReporter(logger, runSettings, new[] { assembly.AssemblyFilename }).CreateMessageHandler(new VisualStudioRunnerLogger(logger));
-				fileName = Path.GetFileNameWithoutExtension(assembly.AssemblyFilename);
+				var diagnosticMessageSink = new DiagnosticMessageSink(logger, fileName, showDiagnostics: assembly.Configuration.DiagnosticMessagesOrDefault, showInternalDiagnostics: assembly.Configuration.InternalDiagnosticMessagesOrDefault);
+				var reporterMessageHandler = await GetRunnerReporter(logger, runSettings).CreateMessageHandler(new VisualStudioRunnerLogger(logger), diagnosticMessageSink);
+				fileName = Path.GetFileNameWithoutExtension(assembly.AssemblyFileName);
 
-				if (!IsXunitTestAssembly(assembly.AssemblyFilename))
+				if (!PlatformAssemblies.Contains(Path.GetFileName(assembly.AssemblyFileName)))
 				{
-					if (assembly.Configuration.DiagnosticMessagesOrDefault)
-						logger.Log("Skipping: {0} (no reference to xUnit.net)", fileName);
-				}
-				else
-				{
-					var discoveryOptions = TestFrameworkOptions.ForDiscovery(assembly.Configuration);
-
-					using var visitor = visitorFactory(assembly.AssemblyFilename, controller, discoveryOptions);
+					using var visitor = visitorFactory(assembly.AssemblyFileName, controller, discoveryOptions);
 					var totalTests = 0;
 					var appDomain = assembly.Configuration.AppDomain ?? AppDomainDefaultBehavior;
 					var usingAppDomains = controller.CanUseAppDomains && appDomain != AppDomainSupport.Denied;
-					reporterMessageHandler.OnMessage(new TestAssemblyDiscoveryStarting(assembly, usingAppDomains, assembly.Configuration.ShadowCopyOrDefault, discoveryOptions));
+					reporterMessageHandler.OnMessage(new TestAssemblyDiscoveryStarting
+					{
+						AppDomain = usingAppDomains ? AppDomainOption.Enabled : AppDomainOption.Disabled,
+						Assembly = assembly,
+						DiscoveryOptions = discoveryOptions,
+						ShadowCopy = assembly.Configuration.ShadowCopyOrDefault,
+						UniqueID = controller.TestAssemblyUniqueID,
+					});
 
 					try
 					{
-						using (new ConsoleSuppressor())
-							controller.Find(testPlatformContext.RequireSourceInformation, visitor, discoveryOptions);
+						var findSettings = new FrontControllerFindSettings(discoveryOptions);
+						controller.Find(visitor, findSettings);
 
 						totalTests = visitor.Finish();
 
-						visitComplete?.Invoke(assembly.AssemblyFilename, controller, discoveryOptions, visitor);
+						visitComplete?.Invoke(assembly.AssemblyFileName, controller, discoveryOptions, visitor);
 					}
 					finally
 					{
-						reporterMessageHandler.OnMessage(new TestAssemblyDiscoveryFinished(assembly, discoveryOptions, totalTests, totalTests));
+						reporterMessageHandler.OnMessage(new TestAssemblyDiscoveryFinished
+						{
+							Assembly = assembly,
+							DiscoveryOptions = discoveryOptions,
+							TestCasesToRun = totalTests,
+							UniqueID = controller.TestAssemblyUniqueID,
+						});
 					}
 				}
 			}
@@ -323,285 +309,23 @@ namespace Xunit.Runner.VisualStudio
 			return true;
 		}
 
-		static TestProperty GetTestProperty() =>
-			TestProperty.Register("XunitTestCase", "xUnit.net Test Case", typeof(string), typeof(VsTestRunner));
-
-		static bool IsXunitTestAssembly(string assemblyFileName)
+		internal static IReadOnlyList<IRunnerReporter> GetAvailableRunnerReporters(LoggerHelper? logger)
 		{
-			// Don't try to load ourselves (or any test framework assemblies), since we fail (issue #47 in xunit/xunit).
-			if (PlatformAssemblies.Contains(Path.GetFileName(assemblyFileName)))
-				return false;
+			var result = RegisteredRunnerReporters.Get(typeof(VsTestRunner).Assembly, out var messages);
 
-#if NETCOREAPP
-			return IsXunitPackageReferenced(assemblyFileName);
-#else
-			var assemblyFolder = Path.GetDirectoryName(assemblyFileName);
-			if (assemblyFolder is null)
-				return false;
+			if (logger is not null)
+				foreach (var message in messages)
+					logger.LogWarning("{0}", message);
 
-			return File.Exists(Path.Combine(assemblyFolder, "xunit.dll"))
-				|| Directory.GetFiles(assemblyFolder, "xunit.execution.*.dll").Length > 0;
-#endif
+			return result;
 		}
 
-#if NETCOREAPP
-		static bool IsXunitPackageReferenced(string assemblyFileName)
-		{
-			var depsFile = assemblyFileName.Replace(".dll", ".deps.json");
-			if (!File.Exists(depsFile))
-				return false;
-
-			try
-			{
-				using var stream = new MemoryStream(Encoding.UTF8.GetBytes(File.ReadAllText(depsFile)));
-				var context = new DependencyContextJsonReader().Read(stream);
-				var xunitLibrary = context.RuntimeLibraries.Where(lib => lib.Name.Equals("xunit") || lib.Name.Equals("xunit.core")).FirstOrDefault();
-				return xunitLibrary is not null;
-			}
-			catch
-			{
-				return false;
-			}
-		}
-#endif
-
-		static string GetAssemblyFileName(string source) =>
-			Path.GetFullPath(source);
-
-		void RunTests(
-			IRunContext? runContext,
-			IFrameworkHandle? frameworkHandle,
-			LoggerHelper logger,
-			TestPlatformContext testPlatformContext,
-			RunSettings runSettings,
-			Func<List<AssemblyRunInfo>> getRunInfos)
-		{
-			Guard.ArgumentNotNull(runContext);
-			Guard.ArgumentNotNull(frameworkHandle);
-
-			try
-			{
-				RemotingUtility.CleanUpRegisteredChannels();
-
-				cancelled = false;
-
-				var runInfos = getRunInfos();
-				var parallelizeAssemblies = runInfos.All(runInfo => runInfo.Assembly.Configuration.ParallelizeAssemblyOrDefault);
-				var reporter = GetRunnerReporter(logger, runSettings, runInfos.Select(ari => ari.Assembly.AssemblyFilename).ToList());
-				using var reporterMessageHandler = MessageSinkWithTypesAdapter.Wrap(reporter.CreateMessageHandler(new VisualStudioRunnerLogger(logger)));
-				using var internalDiagnosticsSinkLocal = DiagnosticMessageSink.ForInternalDiagnostics(logger, runSettings.InternalDiagnosticMessages ?? false);
-				using var _ = AssemblyHelper.SubscribeResolveForAssembly(typeof(VsTestRunner), MessageSinkAdapter.Wrap(internalDiagnosticsSinkLocal));
-
-				if (parallelizeAssemblies)
-					runInfos
-						.Select(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo))
-						.ToList()
-						.ForEach(@event => @event.WaitOne());
-				else
-					runInfos.ForEach(runInfo => RunTestsInAssembly(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo));
-			}
-			catch (Exception ex)
-			{
-				logger.LogError("Catastrophic failure: {0}", ex);
-			}
-		}
-
-		void RunTestsInAssembly(
-			IRunContext runContext,
-			IFrameworkHandle frameworkHandle,
-			LoggerHelper logger,
-			TestPlatformContext testPlatformContext,
-			RunSettings runSettings,
-			IMessageSinkWithTypes reporterMessageHandler,
-			AssemblyRunInfo runInfo)
-		{
-			if (cancelled)
-				return;
-
-			var assemblyDisplayName = "(unknown assembly)";
-
-			try
-			{
-				var assemblyFileName = runInfo.Assembly.AssemblyFilename;
-				assemblyDisplayName = Path.GetFileNameWithoutExtension(assemblyFileName);
-				var configuration = runInfo.Assembly.Configuration;
-				var shadowCopy = configuration.ShadowCopyOrDefault;
-				var appDomain = configuration.AppDomain ?? AppDomainDefaultBehavior;
-				var longRunningSeconds = configuration.LongRunningTestSecondsOrDefault;
-
-				var diagnosticsSinkLocal = DiagnosticMessageSink.ForDiagnostics(logger, assemblyDisplayName, runInfo.Assembly.Configuration.DiagnosticMessagesOrDefault);
-				var diagnosticsSinkRemote = MessageSinkAdapter.Wrap(diagnosticsSinkLocal);
-				var internalDiagnosticsSinkLocal = DiagnosticMessageSink.ForInternalDiagnostics(logger, runInfo.Assembly.Configuration.InternalDiagnosticMessagesOrDefault);
-
-				using var sourceInformationProvider = new VisualStudioSourceInformationProvider(assemblyFileName, internalDiagnosticsSinkLocal);
-				using var controller = new XunitFrontController(appDomain, assemblyFileName, shadowCopy: shadowCopy, sourceInformationProvider: sourceInformationProvider, diagnosticMessageSink: diagnosticsSinkRemote);
-				var testCasesMap = new Dictionary<string, TestCase>();
-				var testCases = new List<ITestCase>();
-				if (runInfo.TestCases is null || !runInfo.TestCases.Any())
-				{
-					// Discover tests
-					var assemblyDiscoveredInfo = default(AssemblyDiscoveredInfo);
-					DiscoverTestsInSource(controller, logger, testPlatformContext, runSettings,
-						(source, discoverer, discoveryOptions) => new VsExecutionDiscoverySink(() => cancelled),
-						(source, discoverer, discoveryOptions, visitor) =>
-						{
-							if (discoveryOptions.GetInternalDiagnosticMessagesOrDefault())
-								foreach (var testCase in visitor.TestCases)
-									logger.Log(testCase, "Discovered [execution] test case '{0}' (ID = '{1}')",
-										testCase.DisplayName, testCase.UniqueID);
-
-							assemblyDiscoveredInfo = new AssemblyDiscoveredInfo(source, GetVsTestCases(source, discoverer, visitor, logger, testPlatformContext));
-						},
-						runInfo.Assembly
-					);
-
-					if (assemblyDiscoveredInfo is null || assemblyDiscoveredInfo.DiscoveredTestCases is null || !assemblyDiscoveredInfo.DiscoveredTestCases.Any())
-					{
-						if (configuration.InternalDiagnosticMessagesOrDefault)
-							logger.LogWarning("Skipping '{0}' since no tests were found during discovery [execution].", assemblyFileName);
-
-						return;
-					}
-
-					// Filter tests
-					var traitNames = new HashSet<string>(assemblyDiscoveredInfo.DiscoveredTestCases.SelectMany(testCase => testCase.TraitNames));
-					var filter = new TestCaseFilter(runContext, logger, assemblyDiscoveredInfo.AssemblyFileName, traitNames);
-					var filteredTestCases = assemblyDiscoveredInfo.DiscoveredTestCases.Where(dtc => dtc.VSTestCase is not null && filter.MatchTestCase(dtc.VSTestCase)).ToList();
-
-					foreach (var filteredTestCase in filteredTestCases)
-					{
-						var uniqueID = filteredTestCase.UniqueID;
-						if (testCasesMap.ContainsKey(uniqueID))
-							logger.LogWarning(filteredTestCase.TestCase, "Skipping test case with duplicate ID '{0}' ('{1}' and '{2}')", uniqueID, testCasesMap[uniqueID].DisplayName, filteredTestCase.VSTestCase?.DisplayName);
-						else if (filteredTestCase.VSTestCase is not null)
-						{
-							testCasesMap.Add(uniqueID, filteredTestCase.VSTestCase);
-							testCases.Add(filteredTestCase.TestCase);
-						}
-					}
-				}
-				else
-				{
-					try
-					{
-						var serializations =
-							runInfo
-								.TestCases
-								.Select(tc => tc.GetPropertyValue<string>(SerializedTestCaseProperty, null))
-								.ToList();
-
-						if (configuration.InternalDiagnosticMessagesOrDefault)
-							logger.LogWithSource(
-								runInfo.Assembly.AssemblyFilename,
-								"Deserializing {0} test case(s):{1}{2}",
-								serializations.Count,
-								Environment.NewLine,
-								string.Join(Environment.NewLine, serializations.Select(x => $"  {x}"))
-							);
-
-						var deserializedTestCasesByUniqueId = controller.BulkDeserialize(serializations);
-
-						if (deserializedTestCasesByUniqueId is null)
-							logger.LogErrorWithSource(assemblyFileName, "Received null response from BulkDeserialize");
-						else
-						{
-							for (var idx = 0; idx < runInfo.TestCases.Count; ++idx)
-							{
-								try
-								{
-									var kvp = deserializedTestCasesByUniqueId[idx];
-									var vsTestCase = runInfo.TestCases[idx];
-
-									if (kvp.Value is null)
-									{
-										logger.LogErrorWithSource(assemblyFileName, "Test case {0} failed to deserialize: {1}", vsTestCase.DisplayName, kvp.Key);
-									}
-									else
-									{
-										testCasesMap.Add(kvp.Key, vsTestCase);
-										testCases.Add(kvp.Value);
-									}
-								}
-								catch (Exception ex)
-								{
-									logger.LogErrorWithSource(assemblyFileName, "Catastrophic error deserializing item #{0}: {1}", idx, ex);
-								}
-							}
-						}
-					}
-					catch (Exception ex)
-					{
-						logger.LogWarningWithSource(assemblyFileName, "Catastrophic error during deserialization: {0}", ex);
-					}
-				}
-
-				// Execute tests
-				var executionOptions = TestFrameworkOptions.ForExecution(runInfo.Assembly.Configuration);
-				if (!runInfo.Assembly.Configuration.ParallelizeTestCollectionsOrDefault)
-				{
-					executionOptions.SetSynchronousMessageReporting(true);
-					executionOptions.SetDisableParallelization(true);
-				}
-
-				reporterMessageHandler.OnMessage(new TestAssemblyExecutionStarting(runInfo.Assembly, executionOptions));
-
-				using var vsExecutionSink = new VsExecutionSink(new TestMessageSink(), frameworkHandle, logger, testCasesMap, () => cancelled, runSettings.CollapseTheories ?? true, runSettings.ShowTestList ?? true);
-				var executionSinkOptions = new ExecutionSinkOptions
-				{
-					DiagnosticMessageSink = diagnosticsSinkRemote,
-					FailSkips = configuration.FailSkipsOrDefault,
-					LongRunningTestTime = TimeSpan.FromSeconds(longRunningSeconds),
-				};
-				var resultsSink = new ExecutionSink(vsExecutionSink, executionSinkOptions);
-
-				using (new ConsoleSuppressor())
-				{
-					controller.RunTests(testCases, resultsSink, executionOptions);
-					resultsSink.Finished.WaitOne();
-				}
-
-				if ((resultsSink.ExecutionSummary.Failed != 0 || resultsSink.ExecutionSummary.Errors != 0) && executionOptions.GetStopOnTestFailOrDefault())
-					cancelled = true;
-			}
-			catch (Exception ex)
-			{
-				logger.LogError("{0}: Catastrophic failure: {1}", assemblyDisplayName, ex);
-			}
-		}
-
-		ManualResetEvent RunTestsInAssemblyAsync(
-			IRunContext runContext,
-			IFrameworkHandle frameworkHandle,
-			LoggerHelper logger,
-			TestPlatformContext testPlatformContext,
-			RunSettings runSettings,
-			IMessageSinkWithTypes reporterMessageHandler,
-			AssemblyRunInfo runInfo)
-		{
-			var @event = new ManualResetEvent(initialState: false);
-			void handler()
-			{
-				try
-				{
-					RunTestsInAssembly(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo);
-				}
-				finally
-				{
-					@event.Set();
-				}
-			}
-
-			ThreadPool.QueueUserWorkItem(_ => handler());
-			return @event;
-		}
-
-		public static IRunnerReporter GetRunnerReporter(
+		internal static IRunnerReporter GetRunnerReporter(
 			LoggerHelper? logger,
-			RunSettings runSettings,
-			IReadOnlyList<string> assemblyFileNames)
+			RunSettings runSettings)
 		{
 			var reporter = default(IRunnerReporter);
-			var availableReporters = new Lazy<IReadOnlyList<IRunnerReporter>>(() => GetAvailableRunnerReporters(logger, assemblyFileNames));
+			var availableReporters = new Lazy<IReadOnlyList<IRunnerReporter>>(() => GetAvailableRunnerReporters(logger));
 
 			try
 			{
@@ -617,51 +341,21 @@ namespace Xunit.Runner.VisualStudio
 			}
 			catch { }
 
-			return reporter ?? new DefaultRunnerReporterWithTypes();
+			return reporter ?? new DefaultRunnerReporter();
 		}
 
-		public static IReadOnlyList<IRunnerReporter> GetAvailableRunnerReporters(
-			LoggerHelper? logger,
-			IReadOnlyList<string> sources)
-		{
-			var result = new List<IRunnerReporter>();
-			var adapterAssembly = typeof(VsTestRunner).Assembly;
-
-			// We need to combine the source folders with our folder to find all potential runners
-			var folders =
-				sources
-					.Select(s => Path.GetDirectoryName(Path.GetFullPath(s)))
-					.WhereNotNull()
-					.Concat(new[] { Path.GetDirectoryName(adapterAssembly.GetLocalCodeBase()) })
-					.Distinct();
-
-			foreach (var folder in folders)
-			{
-				result.AddRange(RunnerReporterUtility.GetAvailableRunnerReporters(folder, out var messages));
-
-				if (logger is not null)
-					foreach (var message in messages)
-						logger.LogWarning(message);
-			}
-
-			return result;
-		}
-
-		static IList<DiscoveredTestCase> GetVsTestCases(
+		static List<DiscoveredTestCase> GetVsTestCases(
 			string source,
-			ITestFrameworkDiscoverer discoverer,
 			VsExecutionDiscoverySink visitor,
 			LoggerHelper logger,
 			TestPlatformContext testPlatformContext)
 		{
-			var descriptorProvider = (discoverer as ITestCaseDescriptorProvider) ?? new DefaultTestCaseDescriptorProvider(discoverer);
 			var testCases = visitor.TestCases;
-			var descriptors = descriptorProvider.GetTestCaseDescriptors(testCases, false);
-			var results = new List<DiscoveredTestCase>(descriptors.Count);
+			var results = new List<DiscoveredTestCase>();
 
-			for (var idx = 0; idx < descriptors.Count; ++idx)
+			for (var idx = 0; idx < testCases.Count; ++idx)
 			{
-				var testCase = new DiscoveredTestCase(source, descriptors[idx], testCases[idx], logger, testPlatformContext);
+				var testCase = new DiscoveredTestCase(source, testCases[idx], logger, testPlatformContext);
 				if (testCase.VSTestCase is not null)
 					results.Add(testCase);
 			}
@@ -669,45 +363,365 @@ namespace Xunit.Runner.VisualStudio
 			return results;
 		}
 
-		class AssemblyDiscoveredInfo
+		static void PrintHeader(LoggerHelper loggerHelper)
 		{
-			public AssemblyDiscoveredInfo(
-				string assemblyFileName,
-				IList<DiscoveredTestCase> discoveredTestCases)
-			{
-				AssemblyFileName = assemblyFileName;
-				DiscoveredTestCases = discoveredTestCases;
-			}
-
-			public string AssemblyFileName { get; }
-
-			public IList<DiscoveredTestCase> DiscoveredTestCases { get; }
+			if (Interlocked.Exchange(ref printedHeader, 1) == 0)
+				loggerHelper.Log("xUnit.net VSTest Adapter v3.1.5 (Babelserver quiet fork) ({0}-bit {1})", IntPtr.Size * 8, RuntimeInformation.FrameworkDescription);
 		}
 
-		class DiscoveredTestCase
+		public void RunTests(
+			IEnumerable<TestCase>? tests,
+			IRunContext? runContext,
+			IFrameworkHandle? frameworkHandle)
 		{
-			public string Name { get; }
+			if (tests is null)
+				return;
 
-			public IEnumerable<string> TraitNames { get; }
+			var stopwatch = Stopwatch.StartNew();
+			var logger = new LoggerHelper(frameworkHandle, stopwatch);
+			var project = new XunitProject();
+			var runSettings = RunSettings.Parse(runContext?.RunSettings?.SettingsXml);
+			var runExplicitTests = tests.All(testCase => testCase.GetPropertyValue(TestCaseExplicitProperty, false));
 
-			public TestCase? VSTestCase { get; }
+			using var _ = AssemblyHelper.SubscribeResolveForAssembly(typeof(VsTestRunner), new DiagnosticMessageSink(logger, showInternalDiagnostics: runSettings.InternalDiagnosticMessages ?? false));
 
-			public ITestCase TestCase { get; }
+			PrintHeader(logger);
 
-			public string UniqueID { get; }
+			var testPlatformContext = new TestPlatformContext { DesignMode = runSettings.DesignMode };
 
-			public DiscoveredTestCase(
-				string source,
-				TestCaseDescriptor descriptor,
-				ITestCase testCase,
-				LoggerHelper logger,
-				TestPlatformContext testPlatformContext)
+			// We can't use await here because the contract from VSTest says we have to wait for everything to finish
+			// before returning from this function.
+			RunTests(
+				runContext, frameworkHandle, logger, testPlatformContext, runSettings,
+				() =>
+					[.. tests
+						.Distinct(TestCaseUniqueIDComparer.Instance)
+						.GroupBy(testCase => testCase.Source)
+						.Select(group => AssemblyRunInfo.Create(logger, project, runSettings, group.Key, [.. group], runExplicitTests))
+						.WhereNotNull()]
+			).GetAwaiter().GetResult();
+		}
+
+		public void RunTests(
+			IEnumerable<string>? sources,
+			IRunContext? runContext,
+			IFrameworkHandle? frameworkHandle)
+		{
+			if (sources is null)
+				return;
+
+			var stopwatch = Stopwatch.StartNew();
+			var logger = new LoggerHelper(frameworkHandle, stopwatch);
+			var project = new XunitProject();
+
+			PrintHeader(logger);
+
+			var runSettings = RunSettings.Parse(runContext?.RunSettings?.SettingsXml);
+			if (!runSettings.IsMatchingTargetFramework())
+				return;
+
+			using var _ = AssemblyHelper.SubscribeResolveForAssembly(typeof(VsTestRunner), new DiagnosticMessageSink(logger, showInternalDiagnostics: runSettings.InternalDiagnosticMessages ?? false));
+
+			var testPlatformContext = new TestPlatformContext { DesignMode = runSettings.DesignMode };
+
+			// We can't use await here because the contract from VSTest says we have to wait for everything to finish
+			// before returning from this function.
+			RunTests(
+				runContext, frameworkHandle, logger, testPlatformContext, runSettings,
+				() => [.. sources.Select(source => AssemblyRunInfo.Create(logger, project, runSettings, Path.GetFullPath(source))).WhereNotNull()]
+			).GetAwaiter().GetResult();
+		}
+
+		async Task RunTests(
+			IRunContext? runContext,
+			IFrameworkHandle? frameworkHandle,
+			LoggerHelper logger,
+			TestPlatformContext testPlatformContext,
+			RunSettings runSettings,
+			Func<List<AssemblyRunInfo>> getRunInfos)
+		{
+			Guard.ArgumentNotNull(runContext);
+			Guard.ArgumentNotNull(frameworkHandle);
+
+			try
 			{
-				Name = $"{descriptor.ClassName}.{descriptor.MethodName} ({descriptor.UniqueID})";
-				TestCase = testCase;
-				UniqueID = descriptor.UniqueID;
-				VSTestCase = VsDiscoverySink.CreateVsTestCase(source, descriptor, logger, testPlatformContext);
-				TraitNames = descriptor.Traits.Keys;
+				RemotingUtility.CleanUpRegisteredChannels();
+
+				if (Debugger.IsAttached)
+					logger.LogWarning("{0}", "* Note: Long running test detection and test timeouts are disabled due to an attached debugger *");
+
+				cancelled = false;
+
+				var runInfos = getRunInfos();
+				var parallelizeAssemblies = runInfos.All(runInfo => runInfo.Assembly.Configuration.ParallelizeAssemblyOrDefault);
+				var diagnosticMessages = runInfos.Any(runInfo => runInfo.Assembly.Configuration.DiagnosticMessagesOrDefault);
+				var internalDiagnosticMessages = runInfos.Any(runInfo => runInfo.Assembly.Configuration.InternalDiagnosticMessagesOrDefault);
+				var reporter = GetRunnerReporter(logger, runSettings);
+				var diagnosticMessageSink = new DiagnosticMessageSink(logger, showDiagnostics: diagnosticMessages, showInternalDiagnostics: internalDiagnosticMessages);
+				await using var reporterMessageHandler = await reporter.CreateMessageHandler(new VisualStudioRunnerLogger(logger), diagnosticMessageSink);
+
+				using (runSettings.SuppressConsoleOutput ?? true ? new ConsoleSuppressor() : null)
+				{
+					if (parallelizeAssemblies)
+						runInfos
+							.Select(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo))
+							.ToList()
+							.ForEach(@event => @event.WaitOne());
+					else
+						runInfos.ForEach(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo).WaitOne());
+				}
+			}
+			catch (Exception ex)
+			{
+				logger.LogError("Catastrophic failure: {0}", ex);
+			}
+		}
+
+		async Task RunTestsInAssembly(
+			IRunContext runContext,
+			IFrameworkHandle frameworkHandle,
+			LoggerHelper logger,
+			TestPlatformContext testPlatformContext,
+			RunSettings runSettings,
+			IMessageSink reporterMessageHandler,
+			AssemblyRunInfo runInfo)
+		{
+			if (cancelled)
+				return;
+
+			var assemblyDisplayName = "(unknown assembly)";
+
+			try
+			{
+				var assemblyFileName = runInfo.Assembly.AssemblyFileName;
+				if (assemblyFileName is null)
+					return;
+
+				// Pre-enumerate theories by default, so that we can see all traits, including those that come from
+				// ITheoryDataRow in v3. See: https://github.com/xunit/visualstudio.xunit/issues/426
+				runInfo.Assembly.Configuration.PreEnumerateTheories ??= true;
+
+				var configuration = runInfo.Assembly.Configuration;
+
+				using var _ = AssemblyHelper.SubscribeResolveForAssembly(assemblyFileName, new DiagnosticMessageSink(logger, showDiagnostics: configuration.DiagnosticMessagesOrDefault, showInternalDiagnostics: configuration.DiagnosticMessagesOrDefault));
+
+				assemblyDisplayName = Path.GetFileNameWithoutExtension(assemblyFileName);
+				var longRunningSeconds = configuration.LongRunningTestSecondsOrDefault;
+
+				var diagnosticSink = new DiagnosticMessageSink(logger, assemblyDisplayName, configuration.DiagnosticMessagesOrDefault, configuration.InternalDiagnosticMessagesOrDefault);
+				var discoveryOptions = TestFrameworkOptions.ForDiscovery(configuration);
+
+				var frameworkHandle2 = frameworkHandle as IFrameworkHandle2;
+				var testProcessLauncher = default(ITestProcessLauncher);
+				if (runContext.IsBeingDebugged && frameworkHandle2 is not null)
+					testProcessLauncher = new DebuggerProcessLauncher(frameworkHandle2);
+
+				await using var sourceInformationProvider = new VisualStudioSourceInformationProvider(assemblyFileName, diagnosticSink);
+				await using var controller = XunitFrontController.Create(runInfo.Assembly, sourceInformationProvider, diagnosticSink, testProcessLauncher);
+				if (controller is null)
+					return;
+
+				var testCasesMap = new ConcurrentDictionary<string, TestCase>();
+				var testCaseSerializations = new ConcurrentBag<string>();
+				if (runInfo.TestCases is null || runInfo.TestCases.Count == 0)
+				{
+					// Discover tests
+					var assemblyDiscoveredInfo = default(AssemblyDiscoveredInfo);
+					await DiscoverTestsInAssembly(
+						controller,
+						logger,
+						runSettings,
+						(source, discoverer, discoveryOptions) => new VsExecutionDiscoverySink(() => cancelled),
+						(source, discoverer, discoveryOptions, visitor) =>
+						{
+							if (configuration.InternalDiagnosticMessagesOrDefault)
+								foreach (var testCase in visitor.TestCases)
+									logger.LogWithSource(assemblyFileName, "Discovered [execution] test case '{0}' (ID = '{1}')", testCase.TestCaseDisplayName, testCase.TestCaseUniqueID);
+
+							assemblyDiscoveredInfo = new AssemblyDiscoveredInfo(source, GetVsTestCases(source, visitor, logger, testPlatformContext));
+						},
+						runInfo.Assembly,
+						discoveryOptions
+					);
+
+					if (assemblyDiscoveredInfo is null || assemblyDiscoveredInfo.DiscoveredTestCases is null || assemblyDiscoveredInfo.DiscoveredTestCases.Count == 0)
+					{
+						if (configuration.InternalDiagnosticMessagesOrDefault)
+							logger.LogWarning("Skipping '{0}': no tests were found during pre-execution discovery", assemblyFileName);
+
+						return;
+					}
+
+					// Filter tests
+					var traitNames = new HashSet<string>(assemblyDiscoveredInfo.DiscoveredTestCases.SelectMany(testCase => testCase.TraitNames));
+					var filter = new TestCaseFilter(runContext, logger, assemblyDiscoveredInfo.AssemblyFileName, traitNames);
+					var filteredTestCases = assemblyDiscoveredInfo.DiscoveredTestCases.Where(dtc => dtc.VSTestCase is not null && filter.MatchTestCase(dtc.VSTestCase)).ToList();
+
+					foreach (var filteredTestCase in filteredTestCases)
+					{
+						var uniqueID = filteredTestCase.UniqueID;
+						if (string.IsNullOrEmpty(filteredTestCase.TestCase.Serialization))
+							logger.LogWarningWithSource(assemblyFileName, "Skipping test case '{0}' (ID '{1}') without serialization", filteredTestCase.TestCase.TestCaseDisplayName, filteredTestCase.TestCase.TestCaseUniqueID);
+						else if (filteredTestCase.VSTestCase is not null)
+						{
+							if (testCasesMap.TryAdd(uniqueID, filteredTestCase.VSTestCase))
+								testCaseSerializations.Add(filteredTestCase.TestCase.Serialization);
+							else
+								logger.LogWarningWithSource(assemblyFileName, "Skipping test case with duplicate ID '{0}' ('{1}' and '{2}')", uniqueID, testCasesMap[uniqueID].DisplayName, filteredTestCase.VSTestCase?.DisplayName);
+						}
+					}
+				}
+				else
+				{
+					foreach (var testCase in runInfo.TestCases)
+					{
+						var uniqueID = testCase.GetPropertyValue<string>(TestCaseUniqueIDProperty, null);
+						var serialization = testCase.GetPropertyValue<string>(TestCaseSerializationProperty, null);
+
+						if (configuration.InternalDiagnosticMessagesOrDefault)
+							logger.LogWithSource(assemblyFileName, "Selective execution requested for test case ID '{0}' (serialization = '{1}')", uniqueID ?? "(null)", serialization ?? "(null)");
+
+						if (uniqueID is null)
+							logger.LogWarningWithSource(assemblyFileName, "VSTestCase {0} did not have an associated unique ID", testCase.DisplayName);
+						else if (string.IsNullOrEmpty(serialization))
+							logger.LogWarningWithSource(assemblyFileName, "Skipping test case '{0}' (ID '{1}') without serialization", testCase.DisplayName, uniqueID);
+						else
+						{
+							if (testCasesMap.TryAdd(uniqueID, testCase))
+								testCaseSerializations.Add(serialization);
+							else
+								logger.LogWarningWithSource(assemblyFileName, "Skipping test case with duplicate ID '{0}' ('{1}' and '{2}')", uniqueID, testCasesMap[uniqueID].DisplayName, testCase.DisplayName);
+						}
+					}
+				}
+
+				// https://github.com/xunit/visualstudio.xunit/issues/417
+				if (testCaseSerializations.IsEmpty)
+				{
+					if (configuration.InternalDiagnosticMessagesOrDefault)
+						logger.LogWarning("Skipping '{0}': no tests passed the filter", assemblyFileName);
+
+					return;
+				}
+
+				// Execute tests
+				var executionOptions = TestFrameworkOptions.ForExecution(configuration);
+				if (!configuration.ParallelizeTestCollectionsOrDefault)
+				{
+					executionOptions.SetSynchronousMessageReporting(true);
+					executionOptions.SetDisableParallelization(true);
+				}
+
+				var vsExecutionSink = new VsExecutionSink(reporterMessageHandler, frameworkHandle, logger, testCasesMap, () => cancelled, runSettings.CollapseTheories ?? true, runSettings.ShowTestList ?? true);
+				var executionSinkOptions = new ExecutionSinkOptions
+				{
+					DiagnosticMessageSink = diagnosticSink,
+					FailSkips = configuration.FailSkipsOrDefault,
+					LongRunningTestTime = TimeSpan.FromSeconds(longRunningSeconds),
+				};
+
+				var appDomain = configuration.AppDomain ?? AppDomainDefaultBehavior;
+				var appDomainOption = controller.CanUseAppDomains && appDomain != AppDomainSupport.Denied ? AppDomainOption.Enabled : AppDomainOption.Disabled;
+				bool shadowCopy = configuration.ShadowCopyOrDefault;
+				var resultsSink = new ExecutionSink(runInfo.Assembly, discoveryOptions, executionOptions, appDomainOption, shadowCopy, vsExecutionSink, executionSinkOptions);
+
+				var frontControllerSettings = new FrontControllerRunSettings(executionOptions, testCaseSerializations);
+				if (testProcessLauncher is not null)
+					frontControllerSettings.LaunchOptions.WaitForDebugger = true;
+
+				controller.Run(resultsSink, frontControllerSettings);
+				resultsSink.Finished.WaitOne();
+
+				if ((resultsSink.ExecutionSummary.Failed != 0 || resultsSink.ExecutionSummary.Errors != 0) && executionOptions.GetStopOnTestFailOrDefault())
+				{
+					logger.Log("{0}", "Canceling due to test failure...");
+					cancelled = true;
+				}
+			}
+			catch (Exception ex)
+			{
+				logger.LogError("{0}: Catastrophic failure: {1}", assemblyDisplayName, ex);
+			}
+		}
+
+		ManualResetEvent RunTestsInAssemblyAsync(
+			IRunContext runContext,
+			IFrameworkHandle frameworkHandle,
+			LoggerHelper logger,
+			TestPlatformContext testPlatformContext,
+			RunSettings runSettings,
+			IMessageSink reporterMessageHandler,
+			AssemblyRunInfo runInfo)
+		{
+			var @event = new ManualResetEvent(initialState: false);
+
+			ThreadPool.QueueUserWorkItem(async _ =>
+			{
+				try
+				{
+					await RunTestsInAssembly(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo);
+				}
+				finally
+				{
+					@event.Set();
+				}
+			});
+
+			return @event;
+		}
+
+		class AssemblyDiscoveredInfo(
+			string assemblyFileName,
+			IList<DiscoveredTestCase> discoveredTestCases)
+		{
+			public string AssemblyFileName { get; } = assemblyFileName;
+
+			public IList<DiscoveredTestCase> DiscoveredTestCases { get; } = discoveredTestCases;
+		}
+
+		class DiscoveredTestCase(
+			string source,
+			ITestCaseDiscovered testCase,
+			LoggerHelper logger,
+			TestPlatformContext testPlatformContext)
+		{
+			public string Name { get; } = $"{testCase.TestClassName}.{testCase.TestMethodName} ({testCase.TestCaseUniqueID})";
+
+			public IEnumerable<string> TraitNames { get; } = testCase.Traits.Keys;
+
+			public TestCase? VSTestCase { get; } = VsDiscoverySink.CreateVsTestCase(source, testCase, logger, testPlatformContext);
+
+			public ITestCaseDiscovered TestCase { get; } = testCase;
+
+			public string UniqueID { get; } = testCase.TestCaseUniqueID;
+		}
+
+		class TestCaseUniqueIDComparer : IEqualityComparer<TestCase>
+		{
+			public static TestCaseUniqueIDComparer Instance = new();
+
+			public bool Equals(TestCase? x, TestCase? y)
+			{
+				if (x is null)
+					return y is null;
+				if (y is null)
+					return false;
+				if (x.GetPropertyValue(TestCaseUniqueIDProperty) is not string xID)
+					return false;
+				if (y.GetPropertyValue(TestCaseUniqueIDProperty) is not string yID)
+					return false;
+
+				return xID == yID;
+			}
+
+			public int GetHashCode(TestCase obj)
+			{
+				if (obj is null)
+					return 0;
+				if (obj.GetPropertyValue(TestCaseUniqueIDProperty) is not string id)
+					return 0;
+
+				return id.GetHashCode();
 			}
 		}
 	}

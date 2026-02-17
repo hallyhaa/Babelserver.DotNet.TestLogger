@@ -300,7 +300,6 @@ public class ListTestLogger : ITestLoggerWithParameters
             }
 
             AccumulateTheoryRun(result);
-            PrintTheoryProgress();
         }
         else
         {
@@ -331,27 +330,20 @@ public class ListTestLogger : ITestLoggerWithParameters
         }
     }
 
-    private void PrintTheoryProgress()
-    {
-        string line;
-        if (_theoryFailCount > 0)
-            line = OutputStyle.GroupedFailedResult(_currentTheoryMethod!, _theoryFailCount, _theoryRunCount, _theoryDuration);
-        else if (_theorySkipCount > 0)
-            line = OutputStyle.GroupedSkippedResult(_currentTheoryMethod!, _theorySkipCount, _theoryRunCount);
-        else
-            line = OutputStyle.GroupedPassedResult(_currentTheoryMethod!, _theoryRunCount, _theoryDuration);
-
-        if (_theoryRunCount > 1)
-        {
-            // Move cursor up one line and clear it, then rewrite
-            Console.Write("\e[1A\e[2K");
-        }
-        Console.WriteLine(line);
-    }
-
     private void FinalizeCurrentTheory()
     {
         if (_currentTheoryMethod == null) return;
+
+        // Print the final grouped result line
+        string line;
+        if (_theoryFailCount > 0)
+            line = OutputStyle.GroupedFailedResult(_currentTheoryMethod, _theoryFailCount, _theoryRunCount, _theoryDuration);
+        else if (_theorySkipCount > 0)
+            line = OutputStyle.GroupedSkippedResult(_currentTheoryMethod, _theorySkipCount, _theoryRunCount);
+        else
+            line = OutputStyle.GroupedPassedResult(_currentTheoryMethod, _theoryRunCount, _theoryDuration);
+
+        Console.WriteLine(line);
 
         // Print failure details for failed theory runs
         foreach (var failure in _theoryFailures)

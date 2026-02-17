@@ -4,9 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Xunit.Internal;
 using Xunit.Sdk;
 
-namespace Xunit.Runner.VisualStudio.Utility;
+namespace Xunit.Runner.VisualStudio;
 
 class DiaSessionWrapperHelper : LongLivedMarshalByRefObject
 {
@@ -78,7 +79,7 @@ class DiaSessionWrapperHelper : LongLivedMarshalByRefObject
 						.ToDictionaryIgnoringDuplicateKeys(k => k.FullName!);
 		}
 
-		typeNameMap ??= new();
+		typeNameMap ??= [];
 	}
 
 	public void Normalize(

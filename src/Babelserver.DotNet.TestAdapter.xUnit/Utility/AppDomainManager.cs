@@ -10,9 +10,11 @@ using Xunit.Internal;
 
 namespace Xunit.Runner.VisualStudio;
 
-class AppDomainManager
+sealed class AppDomainManager : IDisposable
 {
-	readonly AppDomain appDomain;
+	AppDomain? appDomain;
+	readonly object disposalLock = new();
+	bool disposed;
 
 	public AppDomainManager(string assemblyFileName)
 	{
@@ -41,6 +43,9 @@ class AppDomainManager
 		params object[] args)
 			where TObject : class
 	{
+		if (appDomain is null)
+			throw new ObjectDisposedException(nameof(AppDomainManager));
+
 		try
 		{
 			return appDomain.CreateInstanceAndUnwrap(assemblyName.FullName, typeName, false, BindingFlags.Default, null, args, null, null) as TObject;
@@ -52,11 +57,25 @@ class AppDomainManager
 		}
 	}
 
-	public virtual void Dispose()
+	public void Dispose()
 	{
-		if (appDomain is not null)
+		lock (disposalLock)
 		{
-			var cachePath = appDomain.SetupInformation.CachePath;
+			if (disposed)
+				return;
+
+			disposed = true;
+
+			if (appDomain is null)
+				return;
+
+			var cachePath = default(string);
+
+			try
+			{
+				cachePath = appDomain.SetupInformation.CachePath;
+			}
+			catch { }
 
 			try
 			{
@@ -66,6 +85,8 @@ class AppDomainManager
 					Directory.Delete(cachePath, true);
 			}
 			catch { }
+
+			appDomain = null;
 		}
 	}
 }

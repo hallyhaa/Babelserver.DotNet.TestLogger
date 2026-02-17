@@ -1,14 +1,11 @@
+using Xunit.Runner.Common;
+
 namespace Xunit.Runner.VisualStudio;
 
-public class VisualStudioRunnerLogger : IRunnerLogger
+internal class VisualStudioRunnerLogger(LoggerHelper loggerHelper) :
+	IRunnerLogger
 {
 	static readonly object lockObject = new();
-	readonly LoggerHelper loggerHelper;
-
-	public VisualStudioRunnerLogger(LoggerHelper loggerHelper)
-	{
-		this.loggerHelper = loggerHelper;
-	}
 
 	public object LockObject => lockObject;
 
@@ -23,15 +20,20 @@ public class VisualStudioRunnerLogger : IRunnerLogger
 		StackFrameInfo stackFrame,
 		string message)
 	{
-		loggerHelper.Log("{0}", message);
+		if (!IsSuppressedMessage(message))
+			loggerHelper.Log("{0}", message);
 	}
 
 	public void LogMessage(
 		StackFrameInfo stackFrame,
 		string message)
 	{
-		loggerHelper.Log("{0}", message);
+		if (!IsSuppressedMessage(message))
+			loggerHelper.Log("{0}", message);
 	}
+
+	static bool IsSuppressedMessage(string message) =>
+		message.TrimStart().StartsWith("Finished:", StringComparison.Ordinal);
 
 	public void LogRaw(string message)
 	{
@@ -44,4 +46,7 @@ public class VisualStudioRunnerLogger : IRunnerLogger
 	{
 		loggerHelper.LogWarning("{0}", message);
 	}
+
+	public void WaitForAcknowledgment()
+	{ }
 }

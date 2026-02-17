@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net462;net6.0</TargetFrameworks>
+    <TargetFrameworks>net472;net8.0</TargetFrameworks>
     <AssemblyName>Babelserver.DotNet.TestLogger.TestLogger</AssemblyName>
     <RootNamespace>Babelserver.DotNet.TestLogger</RootNamespace>
     <LangVersion>latest</LangVersion>
@@ -10,7 +10,6 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestLogger</PackageId>
-    <Version>2.1.0</Version>
     <Authors>Hallvard</Authors>
     <Description>A test logger for dotnet test that lists each test with colored output</Description>
     <PackageTags>test;logger;list;colors;xunit;nunit;mstest</PackageTags>

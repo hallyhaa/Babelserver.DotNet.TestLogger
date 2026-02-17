@@ -13,7 +13,7 @@ Install this package directly only if you're using NUnit or MSTest (not xUnit).
 ## Usage (NUnit/MSTest)
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestLogger" Version="2.0.0" />
+<PackageReference Include="Babelserver.DotNet.TestLogger" Version="3.0.0-preview" />
 ```
 
 Then run:
@@ -21,22 +21,9 @@ Then run:
 dotnet test --logger list
 ```
 
-## Loggers
+## Output
 
-Two loggers are available:
-
-| Logger | Description |
-|--------|-------------|
-| `list` | Groups parameterized tests (Theory/InlineData) into a single line |
-| `listAll` | Shows every test run individually |
-
-### Grouped output (default)
-
-```bash
-dotnet test --logger list
-```
-
-Parameterized tests are grouped:
+Parameterized tests are grouped by default:
 ```
   ✅ MyTheoryTest (4 runs) (10ms)
 ```
@@ -48,15 +35,16 @@ If some runs fail:
     Error: Assert.Equal() Failure...
 ```
 
-### Verbose output
-
+To show every parameterized test individually instead:
 ```bash
-dotnet test --logger listAll
+dotnet test -- Babelserver.CollapseTheories=false
 ```
-
-Every parameterized test is shown individually:
 ```
   ✅ MyTheoryTest(input: 1, expected: 2) (2ms)
   ✅ MyTheoryTest(input: 2, expected: 4) (1ms)
   ✅ MyTheoryTest(input: 3, expected: 6) (0ms)
 ```
+
+## Requirements
+
+- .NET 8.0+ (including .NET 9.0) or .NET Framework 4.7.2+
