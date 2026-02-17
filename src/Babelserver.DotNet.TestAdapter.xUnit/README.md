@@ -51,7 +51,7 @@ Running MyProject.Tests.UserServiceTests
 Add to your test project's `.csproj`:
 
 ```xml
-<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="2.1.0-preview" />
+<PackageReference Include="Babelserver.DotNet.TestAdapter.xUnit" Version="3.0.0-preview" />
 ```
 
 This single package includes both an xUnit adapter that suppresses xUnit's console noise and the
@@ -94,11 +94,12 @@ In addition, this package adds:
 |---------|---------|-------------|
 | `Babelserver.CollapseTheories` | `true` | Group Theory/MemberData runs into a single line |
 | `Babelserver.ShowTestList` | `true` | Show per-test output (set `false` to behave like standard xUnit) |
+| `Babelserver.SuppressConsoleOutput` | `true` | Suppress direct `Console.Write` output during test execution (e.g. ASP.NET host logging) |
 
 ## Requirements
 
-- .NET 6.0+ or .NET Framework 4.6.2+
-- xUnit 2.x
+- .NET 8.0+ (including .NET 9.0) or .NET Framework 4.7.2+
+- xUnit v3 (3.1.0+)
 
 ## Related Packages
 
@@ -120,11 +121,12 @@ output suppression. This means you get **full compatibility** with the official 
 - All other xUnit features
 
 For documentation on these features, see the official [xUnit documentation](https://xunit.net/docs/configuration-files).
-We have used v2.8.2 of xunit.runner.visualstudio as the base for our fork.
+We have used v3.1.5 of xunit.runner.visualstudio as the base for our fork.
 
 The differences from xunit.runner.visualstudio are:
 
-- xUnit's console noise (`[xUnit.net ...]` messages during execution) is suppressed
+- Direct console output (e.g. ASP.NET host logging, Kafka) is suppressed during execution (configurable)
+- xUnit's reporter noise (`Finished:` messages etc.) is suppressed
 - Test results stream per class as each class completes, rather than all at once at the end
 - Classes with failures are shown last, so passing output isn't interrupted by error details
 - The clean formatted output comes from our TestLogger

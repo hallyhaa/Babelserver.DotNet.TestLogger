@@ -41,6 +41,7 @@ internal class RunSettings
 	// Custom settings for Babelserver
 	public bool? CollapseTheories { get; set; }
 	public bool? ShowTestList { get; set; }
+	public bool? SuppressConsoleOutput { get; set; }
 
 	public void CopyTo(TestAssemblyConfiguration configuration)
 	{
@@ -251,6 +252,10 @@ internal class RunSettings
 						var showTestListString = babelserverElement.Element(Constants.Babelserver.ShowTestList)?.Value;
 						if (bool.TryParse(showTestListString, out var showTestList))
 							result.ShowTestList = showTestList;
+
+						var suppressConsoleOutputString = babelserverElement.Element(Constants.Babelserver.SuppressConsoleOutput)?.Value;
+						if (bool.TryParse(suppressConsoleOutputString, out var suppressConsoleOutput))
+							result.SuppressConsoleOutput = suppressConsoleOutput;
 					}
 
 					// Standard settings from VSTest, which can override the user's configured values
@@ -323,6 +328,7 @@ internal class RunSettings
 		{
 			public const string CollapseTheories = nameof(CollapseTheories);
 			public const string ShowTestList = nameof(ShowTestList);
+			public const string SuppressConsoleOutput = nameof(SuppressConsoleOutput);
 		}
 
 		public static class Xunit

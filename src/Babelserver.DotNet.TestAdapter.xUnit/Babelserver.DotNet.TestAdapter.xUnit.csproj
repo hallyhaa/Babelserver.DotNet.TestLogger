@@ -15,7 +15,6 @@
 
     <!-- NuGet Package -->
     <PackageId>Babelserver.DotNet.TestAdapter.xUnit</PackageId>
-    <Version>3.0.0-preview</Version>
     <Authors>Hallvard</Authors>
     <Description>A quiet xUnit test adapter based on xunit.runner.visualstudio that suppresses console noise</Description>
     <PackageTags>test;xunit;adapter;quiet</PackageTags>
@@ -63,6 +62,10 @@
   <!-- Include the TestLogger automatically -->
   <ItemGroup>
     <ProjectReference Include="..\Babelserver.DotNet.TestLogger\Babelserver.DotNet.TestLogger.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Babelserver.DotNet.TestLogger.Tests" />
   </ItemGroup>
 
   <!-- ILRepack: merge xunit.v3 dependencies into the adapter DLL (same as upstream) -->

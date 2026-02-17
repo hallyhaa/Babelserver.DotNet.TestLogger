@@ -8,7 +8,10 @@ namespace System
 			{
 				disposable?.Dispose();
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				Diagnostics.Debug.WriteLine($"SafeDispose failed: {ex}");
+			}
 		}
 	}
 }
@@ -24,7 +27,10 @@ namespace System.Threading.Tasks
 				{
 					await asyncDisposable.DisposeAsync();
 				}
-				catch { }
+				catch (Exception ex)
+				{
+					Diagnostics.Debug.WriteLine($"SafeDisposeAsync failed: {ex}");
+				}
 		}
 	}
 }

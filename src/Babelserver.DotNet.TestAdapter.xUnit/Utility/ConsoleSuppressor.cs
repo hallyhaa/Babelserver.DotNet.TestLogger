@@ -1,8 +1,9 @@
 namespace Xunit.Runner.VisualStudio;
 
 /// <summary>
-/// Suppresses console output to hide xUnit's noise.
-/// This is the only intentional deviation from standard xunit.runner.visualstudio behavior.
+/// Suppresses direct console output during test execution.
+/// Redirects Console.Out and Console.Error to TextWriter.Null,
+/// restoring the originals on Dispose.
 /// </summary>
 internal class ConsoleSuppressor : IDisposable
 {

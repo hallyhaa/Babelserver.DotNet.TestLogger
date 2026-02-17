@@ -274,8 +274,7 @@ namespace Xunit.Runner.VisualStudio
 					try
 					{
 						var findSettings = new FrontControllerFindSettings(discoveryOptions);
-						using (new ConsoleSuppressor())
-							controller.Find(visitor, findSettings);
+						controller.Find(visitor, findSettings);
 
 						totalTests = visitor.Finish();
 
@@ -461,13 +460,16 @@ namespace Xunit.Runner.VisualStudio
 				var diagnosticMessageSink = new DiagnosticMessageSink(logger, showDiagnostics: diagnosticMessages, showInternalDiagnostics: internalDiagnosticMessages);
 				await using var reporterMessageHandler = await reporter.CreateMessageHandler(new VisualStudioRunnerLogger(logger), diagnosticMessageSink);
 
-				if (parallelizeAssemblies)
-					runInfos
-						.Select(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo))
-						.ToList()
-						.ForEach(@event => @event.WaitOne());
-				else
-					runInfos.ForEach(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo).WaitOne());
+				using (runSettings.SuppressConsoleOutput ?? true ? new ConsoleSuppressor() : null)
+				{
+					if (parallelizeAssemblies)
+						runInfos
+							.Select(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo))
+							.ToList()
+							.ForEach(@event => @event.WaitOne());
+					else
+						runInfos.ForEach(runInfo => RunTestsInAssemblyAsync(runContext, frameworkHandle, logger, testPlatformContext, runSettings, reporterMessageHandler, runInfo).WaitOne());
+				}
 			}
 			catch (Exception ex)
 			{
@@ -627,11 +629,8 @@ namespace Xunit.Runner.VisualStudio
 				if (testProcessLauncher is not null)
 					frontControllerSettings.LaunchOptions.WaitForDebugger = true;
 
-				using (new ConsoleSuppressor())
-				{
-					controller.Run(resultsSink, frontControllerSettings);
-					resultsSink.Finished.WaitOne();
-				}
+				controller.Run(resultsSink, frontControllerSettings);
+				resultsSink.Finished.WaitOne();
 
 				if ((resultsSink.ExecutionSummary.Failed != 0 || resultsSink.ExecutionSummary.Errors != 0) && executionOptions.GetStopOnTestFailOrDefault())
 				{
