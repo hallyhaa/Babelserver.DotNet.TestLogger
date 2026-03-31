@@ -40,6 +40,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private TextWriter _output = Console.Out;
     private TextWriter? _originalError;
     private string _showTestOutput = "onfailure";
+    private int _maxStackTraceLines = 5;
     private readonly object _lock = new();
 
     // Theory grouping state
@@ -70,6 +71,9 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         if (parameters.TryGetValue("ShowTestOutput", out var outputMode) && outputMode != null)
             _showTestOutput = outputMode.ToLowerInvariant();
+
+        if (parameters.TryGetValue("MaxStackTraceLines", out var maxLines) && int.TryParse(maxLines, out var n))
+            _maxStackTraceLines = n;
 
         events.TestResult += OnTestResult;
         events.TestRunComplete += OnTestRunComplete;
@@ -472,10 +476,11 @@ public class ListTestLogger : ITestLoggerWithParameters
             _output.WriteLine($"    {OutputStyle.Red}Error: {result.ErrorMessage}{OutputStyle.Reset}");
         }
 
-        if (string.IsNullOrEmpty(result.ErrorStackTrace))
+        if (string.IsNullOrEmpty(result.ErrorStackTrace) || _maxStackTraceLines == 0)
             return;
 
-        var lines = result.ErrorStackTrace?.Split('\n').Take(5) ?? [];
+        var allLines = result.ErrorStackTrace!.Split('\n');
+        var lines = _maxStackTraceLines < 0 ? allLines : allLines.Take(_maxStackTraceLines);
         foreach (var line in lines)
         {
             if (!string.IsNullOrWhiteSpace(line))

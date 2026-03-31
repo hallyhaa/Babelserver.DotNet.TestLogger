@@ -82,6 +82,7 @@ dotnet test --logger "list;ShowTestOutput=never"
 |---------|---------|-------------|
 | `SuppressConsoleOutput` | `true` | Suppress direct `Console.Write` output during test execution |
 | `ShowTestOutput` | `onfailure` | Show `ITestOutputHelper` output: `onfailure`, `always`, or `never` |
+| `MaxStackTraceLines` | `5` | Max stack trace lines per failure. `0` = hide, `-1` = unlimited |
 
 Note: `CollapseTheories` and `ShowTestList` are only configurable when using the xUnit adapter, which sets them as test properties.
 

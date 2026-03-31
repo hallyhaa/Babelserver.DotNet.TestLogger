@@ -461,6 +461,68 @@ public class ListTestLoggerTests
     }
 
     [Fact]
+    public void MaxStackTraceLines_Default_Shows5Lines()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        var stackTrace = string.Join("\n", Enumerable.Range(1, 10).Select(i => $"  at Method{i}()"));
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Method5", result);
+        Assert.DoesNotContain("Method6", result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Unlimited_ShowsAll()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["MaxStackTraceLines"] = "-1" });
+
+        var stackTrace = string.Join("\n", Enumerable.Range(1, 10).Select(i => $"  at Method{i}()"));
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Method10", result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Zero_HidesStackTrace()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["MaxStackTraceLines"] = "0" });
+
+        var stackTrace = "  at SomeMethod()";
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("boom", result);
+        Assert.DoesNotContain("SomeMethod", result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Custom_RespectsValue()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["MaxStackTraceLines"] = "2" });
+
+        var stackTrace = string.Join("\n", Enumerable.Range(1, 10).Select(i => $"  at Method{i}()"));
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Method2", result);
+        Assert.DoesNotContain("Method3", result);
+    }
+
+    [Fact]
     public void SuppressConsoleOutput_Default_SuppressesConsole()
     {
         var originalOut = Console.Out;
@@ -565,7 +627,7 @@ public class ListTestLoggerTests
 
     private static void SendTestResult(ListTestLogger logger, string fullyQualifiedName, TestOutcome outcome,
         int classTestCount = 0, string? errorMessage = null, bool collapseTheories = true, bool showTestList = true,
-        string? testOutput = null)
+        string? testOutput = null, string? stackTrace = null)
     {
         var testCase = new TestCase(fullyQualifiedName, new Uri("executor://test"), "test.dll")
         {
@@ -581,7 +643,8 @@ public class ListTestLoggerTests
         {
             Outcome = outcome,
             Duration = TimeSpan.FromMilliseconds(10),
-            ErrorMessage = errorMessage
+            ErrorMessage = errorMessage,
+            ErrorStackTrace = stackTrace
         };
 
         if (testOutput != null)
