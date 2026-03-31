@@ -22,7 +22,7 @@
     <DevelopmentDependency>true</DevelopmentDependency>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
+    <RepositoryUrl>https://gitlab.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
 
     <!-- Put DLLs in build/<tfm>/ instead of lib/<tfm>/ (matches xunit.runner.visualstudio) -->
