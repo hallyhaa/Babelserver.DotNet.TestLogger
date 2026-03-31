@@ -370,20 +370,370 @@ public class ListTestLoggerTests
         Assert.Contains("3 runs", output.ToString());
     }
 
-    private static (T logger, StringWriter output) CreateLoggerWithCapturedOutput<T>() where T : ListTestLogger, new()
+    [Fact]
+    public void ShowTestOutput_Default_ShowsOutputOnFailure()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", testOutput: "debug info here");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Output:", result);
+        Assert.Contains("debug info here", result);
+        Assert.Contains("boom", result);
+    }
+
+    [Fact]
+    public void ShowTestOutput_Default_HidesOutputOnPass()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed,
+            classTestCount: 1, testOutput: "debug info here");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("Output:", result);
+        Assert.DoesNotContain("debug info here", result);
+    }
+
+    [Fact]
+    public void ShowTestOutput_Always_ShowsOutputOnPass()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["ShowTestOutput"] = "always" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed,
+            classTestCount: 1, testOutput: "debug info here");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Output:", result);
+        Assert.Contains("debug info here", result);
+    }
+
+    [Fact]
+    public void ShowTestOutput_Never_HidesOutputOnFailure()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["ShowTestOutput"] = "never" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", testOutput: "debug info here");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("Output:", result);
+        Assert.DoesNotContain("debug info here", result);
+        Assert.Contains("boom", result); // error details still shown
+    }
+
+    [Fact]
+    public void ShowTestOutput_OnFailure_TheoryRunShowsOutput()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed,
+            classTestCount: 2, testOutput: "pass output");
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Failed,
+            classTestCount: 2, errorMessage: "bad", testOutput: "fail output");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("fail output", result);
+        Assert.DoesNotContain("pass output", result);
+    }
+
+    [Fact]
+    public void ShowTestOutput_NoMessages_NoOutputSection()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("Output:", result);
+        Assert.Contains("boom", result);
+    }
+
+    [Fact]
+    public void Verbosity_Normal_ShowsAllTests()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("T E S T S", result);
+        Assert.Contains("Namespace.ClassA", result);
+        Assert.Contains("Test1", result);
+        Assert.Contains("Test2", result);
+        Assert.Contains("boom", result);
+        Assert.Contains("Tests: 2", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_ShowsOnlyFailures()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("T E S T S", result); // header shown because there are failures
+        Assert.DoesNotContain("Namespace.ClassA", result); // no class headers
+        Assert.DoesNotContain("Test1", result); // passed test hidden
+        Assert.Contains("Test2", result); // failed test shown
+        Assert.Contains("boom", result);
+        Assert.Contains("Tests: 2", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_NoFailures_JustSummary()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("T E S T S", result); // no header when all pass
+        Assert.DoesNotContain("Test1", result);
+        Assert.Contains("Tests: 1", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_TheoryFailuresShown()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 3);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Failed,
+            classTestCount: 3, errorMessage: "bad");
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 3)", TestOutcome.Passed, classTestCount: 3);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("1/3 runs failed", result);
+        Assert.Contains("bad", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_PassingTheoryHidden()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Passed, classTestCount: 2);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("runs", result);
+        Assert.DoesNotContain("TestMethod", result);
+        Assert.Contains("Tests: 2", result);
+    }
+
+    [Fact]
+    public void Verbosity_Quiet_ShowsOnlySummaryLine()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "quiet" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("T E S T S", result);
+        Assert.DoesNotContain("Namespace.ClassA", result);
+        Assert.DoesNotContain("Test1", result);
+        Assert.DoesNotContain("Test2", result);
+        Assert.DoesNotContain("boom", result);
+        Assert.Contains("Tests: 2", result);
+        // No horizontal lines
+        Assert.DoesNotContain(OutputStyle.HorizontalLine, result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Default_Shows5Lines()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        var stackTrace = string.Join("\n", Enumerable.Range(1, 10).Select(i => $"  at Method{i}()"));
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Method5", result);
+        Assert.DoesNotContain("Method6", result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Unlimited_ShowsAll()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["MaxStackTraceLines"] = "-1" });
+
+        var stackTrace = string.Join("\n", Enumerable.Range(1, 10).Select(i => $"  at Method{i}()"));
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Method10", result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Zero_HidesStackTrace()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["MaxStackTraceLines"] = "0" });
+
+        var stackTrace = "  at SomeMethod()";
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("boom", result);
+        Assert.DoesNotContain("SomeMethod", result);
+    }
+
+    [Fact]
+    public void MaxStackTraceLines_Custom_RespectsValue()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["MaxStackTraceLines"] = "2" });
+
+        var stackTrace = string.Join("\n", Enumerable.Range(1, 10).Select(i => $"  at Method{i}()"));
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Failed,
+            classTestCount: 1, errorMessage: "boom", stackTrace: stackTrace);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("Method2", result);
+        Assert.DoesNotContain("Method3", result);
+    }
+
+    [Fact]
+    public void SuppressConsoleOutput_Default_SuppressesConsole()
+    {
+        var originalOut = Console.Out;
+        try
+        {
+            var capturedOutput = new StringWriter();
+            Console.SetOut(capturedOutput);
+
+            var logger = new ListTestLogger();
+            var events = Substitute.For<TestLoggerEvents>();
+            logger.Initialize(events, new Dictionary<string, string?>());
+
+            // Console.Out is now suppressed — direct writes should vanish
+            Console.Write("SHOULD_BE_SUPPRESSED");
+
+            SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+            CompleteTestRun(logger);
+
+            var result = capturedOutput.ToString();
+            Assert.DoesNotContain("SHOULD_BE_SUPPRESSED", result);
+            Assert.Contains("Test1", result);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
+    public void SuppressConsoleOutput_False_AllowsConsoleOutput()
+    {
+        var originalOut = Console.Out;
+        try
+        {
+            var capturedOutput = new StringWriter();
+            Console.SetOut(capturedOutput);
+
+            var logger = new ListTestLogger();
+            var events = Substitute.For<TestLoggerEvents>();
+            logger.Initialize(events, new Dictionary<string, string?>
+            {
+                ["SuppressConsoleOutput"] = "false"
+            });
+
+            Console.Write("VISIBLE_OUTPUT");
+
+            SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+            CompleteTestRun(logger);
+
+            var result = capturedOutput.ToString();
+            Assert.Contains("VISIBLE_OUTPUT", result);
+            Assert.Contains("Test1", result);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
+    public void SuppressConsoleOutput_RestoredAfterTestRunComplete()
+    {
+        var originalOut = Console.Out;
+        try
+        {
+            var capturedOutput = new StringWriter();
+            Console.SetOut(capturedOutput);
+
+            var logger = new ListTestLogger();
+            var events = Substitute.For<TestLoggerEvents>();
+            logger.Initialize(events, new Dictionary<string, string?>());
+
+            // During suppression, Console.Write should go nowhere
+            Console.Write("DURING_SUPPRESSION");
+            Assert.DoesNotContain("DURING_SUPPRESSION", capturedOutput.ToString());
+
+            SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+            CompleteTestRun(logger);
+
+            // After test run complete, Console.Write should go to the original writer again
+            Console.Write("AFTER_RESTORE");
+            Assert.Contains("AFTER_RESTORE", capturedOutput.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    private static (T logger, StringWriter output) CreateLoggerWithCapturedOutput<T>(
+        Dictionary<string, string?>? parameters = null) where T : ListTestLogger, new()
     {
         var output = new StringWriter();
         Console.SetOut(output);
 
         var logger = new T();
         var events = Substitute.For<TestLoggerEvents>();
-        logger.Initialize(events, new Dictionary<string, string?>());
+        logger.Initialize(events, parameters ?? new Dictionary<string, string?>());
 
         return (logger, output);
     }
 
     private static void SendTestResult(ListTestLogger logger, string fullyQualifiedName, TestOutcome outcome,
-        int classTestCount = 0, string? errorMessage = null, bool collapseTheories = true, bool showTestList = true)
+        int classTestCount = 0, string? errorMessage = null, bool collapseTheories = true, bool showTestList = true,
+        string? testOutput = null, string? stackTrace = null)
     {
         var testCase = new TestCase(fullyQualifiedName, new Uri("executor://test"), "test.dll")
         {
@@ -399,8 +749,12 @@ public class ListTestLoggerTests
         {
             Outcome = outcome,
             Duration = TimeSpan.FromMilliseconds(10),
-            ErrorMessage = errorMessage
+            ErrorMessage = errorMessage,
+            ErrorStackTrace = stackTrace
         };
+
+        if (testOutput != null)
+            testResult.Messages.Add(new TestResultMessage(TestResultMessage.StandardOutCategory, testOutput));
 
         var method = typeof(ListTestLogger).GetMethod("OnTestResult",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);

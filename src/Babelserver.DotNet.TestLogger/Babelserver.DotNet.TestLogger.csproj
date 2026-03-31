@@ -17,7 +17,7 @@
     <DevelopmentDependency>true</DevelopmentDependency>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
+    <RepositoryUrl>https://gitlab.com/hallyhaa/Babelserver.DotNet.TestLogger</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 

@@ -1,5 +1,7 @@
 # Babelserver.DotNet.TestLogger
 
+> **This project has moved to [GitLab](https://gitlab.com/hallyhaa/Babelserver.DotNet.TestLogger).** This GitHub repository is archived and will not receive updates.
+
 A test logger for `dotnet test` with very simple output listing all performed tests, inspired by Maven's Surefire output
 and matching the [Gradle Test Logger Plugin](https://github.com/hallyhaa/gradle-test-logger).
 
