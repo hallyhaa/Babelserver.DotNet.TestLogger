@@ -370,6 +370,96 @@ public class ListTestLoggerTests
         Assert.Contains("3 runs", output.ToString());
     }
 
+    [Fact]
+    public void SuppressConsoleOutput_Default_SuppressesConsole()
+    {
+        var originalOut = Console.Out;
+        try
+        {
+            var capturedOutput = new StringWriter();
+            Console.SetOut(capturedOutput);
+
+            var logger = new ListTestLogger();
+            var events = Substitute.For<TestLoggerEvents>();
+            logger.Initialize(events, new Dictionary<string, string?>());
+
+            // Console.Out is now suppressed — direct writes should vanish
+            Console.Write("SHOULD_BE_SUPPRESSED");
+
+            SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+            CompleteTestRun(logger);
+
+            var result = capturedOutput.ToString();
+            Assert.DoesNotContain("SHOULD_BE_SUPPRESSED", result);
+            Assert.Contains("Test1", result);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
+    public void SuppressConsoleOutput_False_AllowsConsoleOutput()
+    {
+        var originalOut = Console.Out;
+        try
+        {
+            var capturedOutput = new StringWriter();
+            Console.SetOut(capturedOutput);
+
+            var logger = new ListTestLogger();
+            var events = Substitute.For<TestLoggerEvents>();
+            logger.Initialize(events, new Dictionary<string, string?>
+            {
+                ["SuppressConsoleOutput"] = "false"
+            });
+
+            Console.Write("VISIBLE_OUTPUT");
+
+            SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+            CompleteTestRun(logger);
+
+            var result = capturedOutput.ToString();
+            Assert.Contains("VISIBLE_OUTPUT", result);
+            Assert.Contains("Test1", result);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
+    public void SuppressConsoleOutput_RestoredAfterTestRunComplete()
+    {
+        var originalOut = Console.Out;
+        try
+        {
+            var capturedOutput = new StringWriter();
+            Console.SetOut(capturedOutput);
+
+            var logger = new ListTestLogger();
+            var events = Substitute.For<TestLoggerEvents>();
+            logger.Initialize(events, new Dictionary<string, string?>());
+
+            // During suppression, Console.Write should go nowhere
+            Console.Write("DURING_SUPPRESSION");
+            Assert.DoesNotContain("DURING_SUPPRESSION", capturedOutput.ToString());
+
+            SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+            CompleteTestRun(logger);
+
+            // After test run complete, Console.Write should go to the original writer again
+            Console.Write("AFTER_RESTORE");
+            Assert.Contains("AFTER_RESTORE", capturedOutput.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
     private static (T logger, StringWriter output) CreateLoggerWithCapturedOutput<T>() where T : ListTestLogger, new()
     {
         var output = new StringWriter();

@@ -45,6 +45,24 @@ dotnet test -- Babelserver.CollapseTheories=false
   ✅ MyTheoryTest(input: 3, expected: 6) (0ms)
 ```
 
+## Console Output Suppression
+
+Direct console output from test code (e.g. ASP.NET host logging, Kafka clients) is suppressed by default.
+The logger's own output (test results, summary) is unaffected.
+
+To disable suppression:
+```bash
+dotnet test --logger "list;SuppressConsoleOutput=false"
+```
+
+## Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `SuppressConsoleOutput` | `true` | Suppress direct `Console.Write` output during test execution |
+
+Note: `CollapseTheories` and `ShowTestList` are only configurable when using the xUnit adapter, which sets them as test properties.
+
 ## Requirements
 
 - .NET 8.0+ (including .NET 9.0) or .NET Framework 4.7.2+

@@ -37,6 +37,8 @@ public class ListTestLogger : ITestLoggerWithParameters
     private readonly HashSet<string> _classHeaderPrinted = [];
     private bool _headerPrinted;
     private bool? _showTestList;
+    private TextWriter _output = Console.Out;
+    private TextWriter? _originalError;
     private readonly object _lock = new();
 
     // Theory grouping state
@@ -52,6 +54,19 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     public void Initialize(TestLoggerEvents events, Dictionary<string, string?> parameters)
     {
+        _output = Console.Out;
+
+        var suppress = !parameters.TryGetValue("SuppressConsoleOutput", out var value)
+                       || !bool.TryParse(value, out var parsed)
+                       || parsed;
+
+        if (suppress)
+        {
+            _originalError = Console.Error;
+            Console.SetOut(TextWriter.Null);
+            Console.SetError(TextWriter.Null);
+        }
+
         events.TestResult += OnTestResult;
         events.TestRunComplete += OnTestRunComplete;
     }
@@ -91,7 +106,7 @@ public class ListTestLogger : ITestLoggerWithParameters
             {
                 _activeClass = className;
                 if (_classHeaderPrinted.Count > 0)
-                    Console.WriteLine();
+                    _output.WriteLine();
                 PrintClassHeader(className);
                 HandleResult(e.Result);
             }
@@ -161,7 +176,7 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         _activeClass = bestClass;
 
-        Console.WriteLine();
+        _output.WriteLine();
         PrintClassHeader(bestClass);
 
         // Print buffered results and continue streaming
@@ -218,7 +233,7 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     private void FlushBufferedClass(string className)
     {
-        Console.WriteLine();
+        _output.WriteLine();
         PrintClassHeader(className);
         foreach (var result in _buffer[className])
             HandleResult(result);
@@ -231,7 +246,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         if (!_classHeaderPrinted.Add(className))
             return;
 
-        Console.WriteLine($"Running {OutputStyle.Cyan}{className}{OutputStyle.Reset}");
+        _output.WriteLine($"Running {OutputStyle.Cyan}{className}{OutputStyle.Reset}");
     }
 
     private void OnTestRunComplete(object? sender, TestRunCompleteEventArgs e)
@@ -239,7 +254,10 @@ public class ListTestLogger : ITestLoggerWithParameters
         lock (_lock)
         {
             if (_showTestList == false)
+            {
+                RestoreConsole();
                 return;
+            }
 
             if (!_headerPrinted)
             {
@@ -260,7 +278,18 @@ public class ListTestLogger : ITestLoggerWithParameters
             _buffer.Clear();
 
             PrintSummary();
+            RestoreConsole();
         }
+    }
+
+    private void RestoreConsole()
+    {
+        if (_originalError == null)
+            return;
+
+        Console.SetOut(_output);
+        Console.SetError(_originalError);
+        _originalError = null;
     }
 
     private void CountResult(TestResult result)
@@ -343,13 +372,13 @@ public class ListTestLogger : ITestLoggerWithParameters
         else
             line = OutputStyle.GroupedPassedResult(_currentTheoryMethod, _theoryRunCount, _theoryDuration);
 
-        Console.WriteLine(line);
+        _output.WriteLine(line);
 
         // Print failure details for failed theory runs
         foreach (var failure in _theoryFailures)
         {
             var testName = GetTestName(failure.TestCase.DisplayName, failure.TestCase.FullyQualifiedName);
-            Console.WriteLine($"    {OutputStyle.Red}{testName}{OutputStyle.Reset}");
+            _output.WriteLine($"    {OutputStyle.Red}{testName}{OutputStyle.Reset}");
             PrintFailureDetails(failure);
         }
 
@@ -364,12 +393,12 @@ public class ListTestLogger : ITestLoggerWithParameters
         switch (result.Outcome)
         {
             case TestOutcome.Passed:
-                Console.WriteLine(OutputStyle.PassedResult(testName, result.Duration));
+                _output.WriteLine(OutputStyle.PassedResult(testName, result.Duration));
                 _totalPassed++;
                 break;
 
             case TestOutcome.Failed:
-                Console.WriteLine(OutputStyle.FailedResult(testName, result.Duration));
+                _output.WriteLine(OutputStyle.FailedResult(testName, result.Duration));
                 PrintFailureDetails(result);
                 _totalFailed++;
                 break;
@@ -377,60 +406,60 @@ public class ListTestLogger : ITestLoggerWithParameters
             case TestOutcome.Skipped:
                 var reason = result.ErrorMessage
                     ?? result.Messages.FirstOrDefault()?.Text;
-                Console.WriteLine(OutputStyle.SkippedResult(testName, reason));
+                _output.WriteLine(OutputStyle.SkippedResult(testName, reason));
                 _totalSkipped++;
                 break;
             case TestOutcome.None:
-                Console.WriteLine(OutputStyle.UnknownResult(testName, "None"));
+                _output.WriteLine(OutputStyle.UnknownResult(testName, "None"));
                 _totalSkipped++;
                 break;
 
             case TestOutcome.NotFound:
-                Console.WriteLine(OutputStyle.UnknownResult(testName, "NotFound"));
+                _output.WriteLine(OutputStyle.UnknownResult(testName, "NotFound"));
                 _totalSkipped++;
                 break;
 
             default:
-                Console.WriteLine(OutputStyle.UnknownResult(testName, result.Outcome.ToString()));
+                _output.WriteLine(OutputStyle.UnknownResult(testName, result.Outcome.ToString()));
                 _totalSkipped++;
                 break;
         }
     }
 
-    private static void PrintHeader()
+    private void PrintHeader()
     {
-        Console.WriteLine();
-        Console.WriteLine(OutputStyle.HorizontalLine);
-        Console.WriteLine($" {OutputStyle.Bold}T E S T S{OutputStyle.Reset}");
-        Console.WriteLine(OutputStyle.HorizontalLine);
+        _output.WriteLine();
+        _output.WriteLine(OutputStyle.HorizontalLine);
+        _output.WriteLine($" {OutputStyle.Bold}T E S T S{OutputStyle.Reset}");
+        _output.WriteLine(OutputStyle.HorizontalLine);
     }
 
     private void PrintSummary()
     {
         var totalTests = _totalPassed + _totalFailed + _totalSkipped;
 
-        Console.WriteLine(OutputStyle.HorizontalLine);
+        _output.WriteLine(OutputStyle.HorizontalLine);
 
         if (_totalFailed > 0)
         {
-            Console.WriteLine($"{OutputStyle.Failed} {OutputStyle.Red}Tests: {totalTests}, " +
+            _output.WriteLine($"{OutputStyle.Failed} {OutputStyle.Red}Tests: {totalTests}, " +
                 $"Passed: {_totalPassed}, Failed: {_totalFailed}, Skipped: {_totalSkipped}{OutputStyle.Reset}");
         }
         else
         {
-            Console.WriteLine($"{OutputStyle.Passed} {OutputStyle.Green}Tests: {totalTests}, " +
+            _output.WriteLine($"{OutputStyle.Passed} {OutputStyle.Green}Tests: {totalTests}, " +
                 $"Passed: {_totalPassed}, Failed: {_totalFailed}, Skipped: {_totalSkipped}{OutputStyle.Reset}");
         }
 
-        Console.WriteLine(OutputStyle.HorizontalLine);
-        Console.WriteLine();
+        _output.WriteLine(OutputStyle.HorizontalLine);
+        _output.WriteLine();
     }
 
-    private static void PrintFailureDetails(TestResult result)
+    private void PrintFailureDetails(TestResult result)
     {
         if (!string.IsNullOrEmpty(result.ErrorMessage))
         {
-            Console.WriteLine($"    {OutputStyle.Red}Error: {result.ErrorMessage}{OutputStyle.Reset}");
+            _output.WriteLine($"    {OutputStyle.Red}Error: {result.ErrorMessage}{OutputStyle.Reset}");
         }
 
         if (string.IsNullOrEmpty(result.ErrorStackTrace))
@@ -441,7 +470,7 @@ public class ListTestLogger : ITestLoggerWithParameters
         {
             if (!string.IsNullOrWhiteSpace(line))
             {
-                Console.WriteLine($"    {OutputStyle.Red}{line.Trim()}{OutputStyle.Reset}");
+                _output.WriteLine($"    {OutputStyle.Red}{line.Trim()}{OutputStyle.Reset}");
             }
         }
     }
