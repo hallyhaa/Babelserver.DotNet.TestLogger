@@ -39,6 +39,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private bool? _showTestList;
     private TextWriter _output = Console.Out;
     private TextWriter? _originalError;
+    private string _showTestOutput = "onfailure";
     private readonly object _lock = new();
 
     // Theory grouping state
@@ -66,6 +67,9 @@ public class ListTestLogger : ITestLoggerWithParameters
             Console.SetOut(TextWriter.Null);
             Console.SetError(TextWriter.Null);
         }
+
+        if (parameters.TryGetValue("ShowTestOutput", out var outputMode) && outputMode != null)
+            _showTestOutput = outputMode.ToLowerInvariant();
 
         events.TestResult += OnTestResult;
         events.TestRunComplete += OnTestRunComplete;
@@ -379,6 +383,8 @@ public class ListTestLogger : ITestLoggerWithParameters
         {
             var testName = GetTestName(failure.TestCase.DisplayName, failure.TestCase.FullyQualifiedName);
             _output.WriteLine($"    {OutputStyle.Red}{testName}{OutputStyle.Reset}");
+            if (_showTestOutput is "onfailure" or "always")
+                PrintTestOutput(failure);
             PrintFailureDetails(failure);
         }
 
@@ -394,11 +400,15 @@ public class ListTestLogger : ITestLoggerWithParameters
         {
             case TestOutcome.Passed:
                 _output.WriteLine(OutputStyle.PassedResult(testName, result.Duration));
+                if (_showTestOutput == "always")
+                    PrintTestOutput(result);
                 _totalPassed++;
                 break;
 
             case TestOutcome.Failed:
                 _output.WriteLine(OutputStyle.FailedResult(testName, result.Duration));
+                if (_showTestOutput is "onfailure" or "always")
+                    PrintTestOutput(result);
                 PrintFailureDetails(result);
                 _totalFailed++;
                 break;
@@ -472,6 +482,24 @@ public class ListTestLogger : ITestLoggerWithParameters
             {
                 _output.WriteLine($"    {OutputStyle.Red}{line.Trim()}{OutputStyle.Reset}");
             }
+        }
+    }
+
+    private void PrintTestOutput(TestResult result)
+    {
+        var messages = result.Messages
+            .Where(m => m.Category == TestResultMessage.StandardOutCategory && !string.IsNullOrWhiteSpace(m.Text))
+            .Select(m => m.Text!)
+            .ToList();
+
+        if (messages.Count == 0)
+            return;
+
+        _output.WriteLine($"    {OutputStyle.Dim}Output:{OutputStyle.Reset}");
+        foreach (var text in messages)
+        {
+            foreach (var line in text.TrimEnd().Split('\n'))
+                _output.WriteLine($"    {OutputStyle.Dim}  {line.TrimEnd('\r')}{OutputStyle.Reset}");
         }
     }
 

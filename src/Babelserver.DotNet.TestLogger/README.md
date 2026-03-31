@@ -55,11 +55,33 @@ To disable suppression:
 dotnet test --logger "list;SuppressConsoleOutput=false"
 ```
 
+## Test Output (ITestOutputHelper)
+
+When tests fail, output written via `ITestOutputHelper` (xUnit) or equivalent is shown automatically:
+```
+  ❌ CreateUser_WhenDuplicate_Throws (12ms)
+    Output:
+      Debug: created user with id 42
+      Debug: attempting to create duplicate...
+    Error: Expected DuplicateException but got none
+```
+
+To also show output for passing tests (useful for debugging):
+```bash
+dotnet test --logger "list;ShowTestOutput=always"
+```
+
+To disable output completely:
+```bash
+dotnet test --logger "list;ShowTestOutput=never"
+```
+
 ## Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `SuppressConsoleOutput` | `true` | Suppress direct `Console.Write` output during test execution |
+| `ShowTestOutput` | `onfailure` | Show `ITestOutputHelper` output: `onfailure`, `always`, or `never` |
 
 Note: `CollapseTheories` and `ShowTestList` are only configurable when using the xUnit adapter, which sets them as test properties.
 
