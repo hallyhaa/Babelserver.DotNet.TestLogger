@@ -45,6 +45,35 @@ dotnet test -- Babelserver.CollapseTheories=false
   ✅ MyTheoryTest(input: 3, expected: 6) (0ms)
 ```
 
+## Verbosity
+
+By default, all tests are listed individually. Use `Verbosity` to reduce output:
+
+```bash
+# Only show failed tests and summary (great for CI)
+dotnet test --logger "list;Verbosity=minimal"
+
+# Just a one-line pass/fail summary
+dotnet test --logger "list;Verbosity=quiet"
+```
+
+`minimal` with failures:
+```
+────────────────────────────────────────────────────────────
+ T E S T S
+────────────────────────────────────────────────────────────
+  ❌ DeleteUser_WhenNotFound_ThrowsException (3ms)
+    Error: Expected exception but none was thrown
+────────────────────────────────────────────────────────────
+❌ Tests: 42, Passed: 41, Failed: 1, Skipped: 0
+────────────────────────────────────────────────────────────
+```
+
+`minimal` when all pass, and `quiet` in both cases:
+```
+✅ Tests: 42, Passed: 42, Failed: 0, Skipped: 0
+```
+
 ## Console Output Suppression
 
 Direct console output from test code (e.g. ASP.NET host logging, Kafka clients) is suppressed by default.
@@ -80,11 +109,23 @@ dotnet test --logger "list;ShowTestOutput=never"
 
 | Setting | Default | Description |
 |---------|---------|-------------|
+| `Verbosity` | `normal` | Output level: `normal`, `minimal` (failures only), or `quiet` (summary only) |
 | `SuppressConsoleOutput` | `true` | Suppress direct `Console.Write` output during test execution |
 | `ShowTestOutput` | `onfailure` | Show `ITestOutputHelper` output: `onfailure`, `always`, or `never` |
 | `MaxStackTraceLines` | `5` | Max stack trace lines per failure. `0` = hide, `-1` = unlimited |
 
 Note: `CollapseTheories` and `ShowTestList` are only configurable when using the xUnit adapter, which sets them as test properties.
+
+## CI Usage
+
+This logger is designed for human-readable output. For machine-readable results (CI integrations,
+dashboards, etc.), combine it with a structured logger:
+
+```bash
+dotnet test --logger list --logger trx
+```
+
+Both loggers run in parallel — you get clean terminal output and a machine-readable file for your CI system.
 
 ## Requirements
 

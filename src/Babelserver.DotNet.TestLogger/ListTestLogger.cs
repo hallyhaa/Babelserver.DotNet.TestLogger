@@ -41,6 +41,7 @@ public class ListTestLogger : ITestLoggerWithParameters
     private TextWriter? _originalError;
     private string _showTestOutput = "onfailure";
     private int _maxStackTraceLines = 5;
+    private string _verbosity = "normal";
     private readonly object _lock = new();
 
     // Theory grouping state
@@ -75,6 +76,9 @@ public class ListTestLogger : ITestLoggerWithParameters
         if (parameters.TryGetValue("MaxStackTraceLines", out var maxLines) && int.TryParse(maxLines, out var n))
             _maxStackTraceLines = n;
 
+        if (parameters.TryGetValue("Verbosity", out var verbosity) && verbosity != null)
+            _verbosity = verbosity.ToLowerInvariant();
+
         events.TestResult += OnTestResult;
         events.TestRunComplete += OnTestRunComplete;
     }
@@ -85,17 +89,14 @@ public class ListTestLogger : ITestLoggerWithParameters
         {
             _showTestList ??= e.Result.TestCase.GetPropertyValue(ShowTestListProperty, true);
 
-            if (!_showTestList.Value)
+            if (!_showTestList.Value || _verbosity == "quiet")
             {
                 CountResult(e.Result);
                 return;
             }
 
-            if (!_headerPrinted)
-            {
-                PrintHeader();
-                _headerPrinted = true;
-            }
+            if (_verbosity == "normal" && !_headerPrinted)
+                EnsureHeader();
 
             var className = GetClassName(e.Result.TestCase.FullyQualifiedName);
 
@@ -113,7 +114,7 @@ public class ListTestLogger : ITestLoggerWithParameters
             if (_activeClass == null)
             {
                 _activeClass = className;
-                if (_classHeaderPrinted.Count > 0)
+                if (_verbosity == "normal" && _classHeaderPrinted.Count > 0)
                     _output.WriteLine();
                 PrintClassHeader(className);
                 HandleResult(e.Result);
@@ -184,7 +185,8 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         _activeClass = bestClass;
 
-        _output.WriteLine();
+        if (_verbosity == "normal")
+            _output.WriteLine();
         PrintClassHeader(bestClass);
 
         // Print buffered results and continue streaming
@@ -241,7 +243,8 @@ public class ListTestLogger : ITestLoggerWithParameters
 
     private void FlushBufferedClass(string className)
     {
-        _output.WriteLine();
+        if (_verbosity == "normal")
+            _output.WriteLine();
         PrintClassHeader(className);
         foreach (var result in _buffer[className])
             HandleResult(result);
@@ -249,8 +252,18 @@ public class ListTestLogger : ITestLoggerWithParameters
         _buffer.Remove(className);
     }
 
+    private void EnsureHeader()
+    {
+        if (_headerPrinted) return;
+        PrintHeader();
+        _headerPrinted = true;
+    }
+
     private void PrintClassHeader(string className)
     {
+        if (_verbosity != "normal")
+            return;
+
         if (!_classHeaderPrinted.Add(className))
             return;
 
@@ -267,11 +280,15 @@ public class ListTestLogger : ITestLoggerWithParameters
                 return;
             }
 
-            if (!_headerPrinted)
+            if (_verbosity == "quiet")
             {
-                PrintHeader();
-                _headerPrinted = true;
+                PrintQuietSummary();
+                RestoreConsole();
+                return;
             }
+
+            if (_verbosity == "normal" && !_headerPrinted)
+                EnsureHeader();
 
             FinalizeCurrentTheory();
 
@@ -371,25 +388,32 @@ public class ListTestLogger : ITestLoggerWithParameters
     {
         if (_currentTheoryMethod == null) return;
 
-        // Print the final grouped result line
-        string line;
-        if (_theoryFailCount > 0)
-            line = OutputStyle.GroupedFailedResult(_currentTheoryMethod, _theoryFailCount, _theoryRunCount, _theoryDuration);
-        else if (_theorySkipCount > 0)
-            line = OutputStyle.GroupedSkippedResult(_currentTheoryMethod, _theorySkipCount, _theoryRunCount);
-        else
-            line = OutputStyle.GroupedPassedResult(_currentTheoryMethod, _theoryRunCount, _theoryDuration);
+        var hasFails = _theoryFailCount > 0;
 
-        _output.WriteLine(line);
-
-        // Print failure details for failed theory runs
-        foreach (var failure in _theoryFailures)
+        if (hasFails || _verbosity == "normal")
         {
-            var testName = GetTestName(failure.TestCase.DisplayName, failure.TestCase.FullyQualifiedName);
-            _output.WriteLine($"    {OutputStyle.Red}{testName}{OutputStyle.Reset}");
-            if (_showTestOutput is "onfailure" or "always")
-                PrintTestOutput(failure);
-            PrintFailureDetails(failure);
+            if (hasFails)
+                EnsureHeader();
+
+            string line;
+            if (hasFails)
+                line = OutputStyle.GroupedFailedResult(_currentTheoryMethod, _theoryFailCount, _theoryRunCount, _theoryDuration);
+            else if (_theorySkipCount > 0)
+                line = OutputStyle.GroupedSkippedResult(_currentTheoryMethod, _theorySkipCount, _theoryRunCount);
+            else
+                line = OutputStyle.GroupedPassedResult(_currentTheoryMethod, _theoryRunCount, _theoryDuration);
+
+            _output.WriteLine(line);
+
+            // Print failure details for failed theory runs
+            foreach (var failure in _theoryFailures)
+            {
+                var testName = GetTestName(failure.TestCase.DisplayName, failure.TestCase.FullyQualifiedName);
+                _output.WriteLine($"    {OutputStyle.Red}{testName}{OutputStyle.Reset}");
+                if (_showTestOutput is "onfailure" or "always")
+                    PrintTestOutput(failure);
+                PrintFailureDetails(failure);
+            }
         }
 
         _currentTheoryMethod = null;
@@ -403,13 +427,17 @@ public class ListTestLogger : ITestLoggerWithParameters
         switch (result.Outcome)
         {
             case TestOutcome.Passed:
-                _output.WriteLine(OutputStyle.PassedResult(testName, result.Duration));
-                if (_showTestOutput == "always")
-                    PrintTestOutput(result);
+                if (_verbosity == "normal")
+                {
+                    _output.WriteLine(OutputStyle.PassedResult(testName, result.Duration));
+                    if (_showTestOutput == "always")
+                        PrintTestOutput(result);
+                }
                 _totalPassed++;
                 break;
 
             case TestOutcome.Failed:
+                EnsureHeader();
                 _output.WriteLine(OutputStyle.FailedResult(testName, result.Duration));
                 if (_showTestOutput is "onfailure" or "always")
                     PrintTestOutput(result);
@@ -418,23 +446,18 @@ public class ListTestLogger : ITestLoggerWithParameters
                 break;
 
             case TestOutcome.Skipped:
-                var reason = result.ErrorMessage
-                    ?? result.Messages.FirstOrDefault()?.Text;
-                _output.WriteLine(OutputStyle.SkippedResult(testName, reason));
-                _totalSkipped++;
-                break;
-            case TestOutcome.None:
-                _output.WriteLine(OutputStyle.UnknownResult(testName, "None"));
-                _totalSkipped++;
-                break;
-
-            case TestOutcome.NotFound:
-                _output.WriteLine(OutputStyle.UnknownResult(testName, "NotFound"));
+                if (_verbosity == "normal")
+                {
+                    var reason = result.ErrorMessage
+                        ?? result.Messages.FirstOrDefault()?.Text;
+                    _output.WriteLine(OutputStyle.SkippedResult(testName, reason));
+                }
                 _totalSkipped++;
                 break;
 
             default:
-                _output.WriteLine(OutputStyle.UnknownResult(testName, result.Outcome.ToString()));
+                if (_verbosity == "normal")
+                    _output.WriteLine(OutputStyle.UnknownResult(testName, result.Outcome.ToString()));
                 _totalSkipped++;
                 break;
         }
@@ -467,6 +490,22 @@ public class ListTestLogger : ITestLoggerWithParameters
 
         _output.WriteLine(OutputStyle.HorizontalLine);
         _output.WriteLine();
+    }
+
+    private void PrintQuietSummary()
+    {
+        var totalTests = _totalPassed + _totalFailed + _totalSkipped;
+
+        if (_totalFailed > 0)
+        {
+            _output.WriteLine($"{OutputStyle.Failed} {OutputStyle.Red}Tests: {totalTests}, " +
+                $"Passed: {_totalPassed}, Failed: {_totalFailed}, Skipped: {_totalSkipped}{OutputStyle.Reset}");
+        }
+        else
+        {
+            _output.WriteLine($"{OutputStyle.Passed} {OutputStyle.Green}Tests: {totalTests}, " +
+                $"Passed: {_totalPassed}, Failed: {_totalFailed}, Skipped: {_totalSkipped}{OutputStyle.Reset}");
+        }
     }
 
     private void PrintFailureDetails(TestResult result)

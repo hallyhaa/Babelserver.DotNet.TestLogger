@@ -461,6 +461,112 @@ public class ListTestLoggerTests
     }
 
     [Fact]
+    public void Verbosity_Normal_ShowsAllTests()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("T E S T S", result);
+        Assert.Contains("Namespace.ClassA", result);
+        Assert.Contains("Test1", result);
+        Assert.Contains("Test2", result);
+        Assert.Contains("boom", result);
+        Assert.Contains("Tests: 2", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_ShowsOnlyFailures()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("T E S T S", result); // header shown because there are failures
+        Assert.DoesNotContain("Namespace.ClassA", result); // no class headers
+        Assert.DoesNotContain("Test1", result); // passed test hidden
+        Assert.Contains("Test2", result); // failed test shown
+        Assert.Contains("boom", result);
+        Assert.Contains("Tests: 2", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_NoFailures_JustSummary()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 1);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("T E S T S", result); // no header when all pass
+        Assert.DoesNotContain("Test1", result);
+        Assert.Contains("Tests: 1", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_TheoryFailuresShown()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 3);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Failed,
+            classTestCount: 3, errorMessage: "bad");
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 3)", TestOutcome.Passed, classTestCount: 3);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.Contains("1/3 runs failed", result);
+        Assert.Contains("bad", result);
+    }
+
+    [Fact]
+    public void Verbosity_Minimal_PassingTheoryHidden()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "minimal" });
+
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 1)", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.TestMethod(x: 2)", TestOutcome.Passed, classTestCount: 2);
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("runs", result);
+        Assert.DoesNotContain("TestMethod", result);
+        Assert.Contains("Tests: 2", result);
+    }
+
+    [Fact]
+    public void Verbosity_Quiet_ShowsOnlySummaryLine()
+    {
+        var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>(
+            new Dictionary<string, string?> { ["Verbosity"] = "quiet" });
+
+        SendTestResult(logger, "Namespace.ClassA.Test1", TestOutcome.Passed, classTestCount: 2);
+        SendTestResult(logger, "Namespace.ClassA.Test2", TestOutcome.Failed, classTestCount: 2, errorMessage: "boom");
+        CompleteTestRun(logger);
+
+        var result = output.ToString();
+        Assert.DoesNotContain("T E S T S", result);
+        Assert.DoesNotContain("Namespace.ClassA", result);
+        Assert.DoesNotContain("Test1", result);
+        Assert.DoesNotContain("Test2", result);
+        Assert.DoesNotContain("boom", result);
+        Assert.Contains("Tests: 2", result);
+        // No horizontal lines
+        Assert.DoesNotContain(OutputStyle.HorizontalLine, result);
+    }
+
+    [Fact]
     public void MaxStackTraceLines_Default_Shows5Lines()
     {
         var (logger, output) = CreateLoggerWithCapturedOutput<ListTestLogger>();
